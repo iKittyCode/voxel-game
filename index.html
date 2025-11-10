@@ -3,9 +3,25 @@
   <head>
     <meta charset="utf-8" />
     <title>Voxel Game</title>
+    <link
+      rel="icon"
+      href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAX1JREFUOE9tk71KA1EQhWejIQlhWX9QMUgKQa1EO/MCNpa2voFv4BuIbyZWYqWFoEVELTQukkjUlW/IuUyCt9m7d+aeOXPO3Gz/pKhWurmx+nfv1tle8L3W62NpiteLXxsPahbPsuOLrer++sU6u23r33xas5i3vGjZbHL8BxxQzrLDs40KRB2yB4xK5WBoo8H3FOjD1Yfn5msNj2VH552qWWsbLKgeLwC2ubeaYlwkrkWhrHe6XEFZ1cajH6s35xIYACwKiGW+2PJ/2sgQUZVJUEXty7ehg5fPXw6AyPQu1klEKu8crBsXcAMWEgpx2dOSRIYFuVMAoBO4vXxKbahvATiLicjkugvqSQEqSQu+oq5ZwQFZ7S5oOKA3W1FA0Wb2ynUGiIK/UX0ow4xFr7F/MYSJ24i3oiqQOI0SLA4cQjsANnIZATlkASKaS91GmkqsjCzJSRrMzr6qRV2iHlzmP7WQ5nPyUORMHDIx1Yg7Az3n/55qHFnFZaUm8g9OXDfHbRfQTQAAAABJRU5ErkJggg=="
+    />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <script>
+      const correctPassword = "ilovevoxel";
+
+      let password = prompt("Please enter the password to play:");
+
+      if (password !== correctPassword) {
+        alert("Incorrect password. Access denied.");
+        window.location.href =
+          "https://docs.google.com/document/d/1FdFHsuVUZp2Y1J7FJe8L4Jat2ybJbUATiCuC4DC6ew8/edit?tab=t.0";
+      }
+    </script>
+
     <div id="hud">
       <div><strong>Block:</strong> <span id="currentBlock">grass</span></div>
       <div id="blockPalette"></div>
@@ -13,9 +29,24 @@
         <button id="saveBtn">Save World</button>
         <button id="loadBtn">Load World</button>
         <button id="clearBtn">Clear Save</button>
-        <a href="https://docs.google.com/document/d/1GYod-WmRxJl89l7dxRTpEu1B-tp2sW3FFMaRxkv2sfM/edit?tab=t.0" target="_blank"><button id="MiscBtn">Credits and Game log</button></a>
-        <a href="https://docs.google.com/forms/d/e/1FAIpQLSfCWVajFY9luS-1usq6NH4JPFzu97Hp-3Xy2z0xHjdgKWDekg/viewform" target="_blank"><button id="BugBtn">Bug reporter</button></a>
-        <a href="https://docs.google.com/forms/d/e/1FAIpQLScayLIDw7cRBk3w_aKL7so7jvtvpIFT_31QfvEEbzc7oAD6yA/viewform?usp=publish-editor" target="_blank"><button id="IdeaBtn">Idea Submission</button></a>
+        <button id="importBtn">Import Save</button>
+        <button id="exportBtn">Export Save</button>
+        <br />
+        <a
+          href="https://docs.google.com/document/d/1GYod-WmRxJl89l7dxRTpEu1B-tp2sW3FFMaRxkv2sfM/edit?tab=t.0"
+          target="_blank"
+          ><button id="MiscBtn">Credits and Game log</button></a
+        >
+        <a
+          href="https://docs.google.com/forms/d/e/1FAIpQLSfCWVajFY9luS-1usq6NH4JPFzu97Hp-3Xy2z0xHjdgKWDekg/viewform"
+          target="_blank"
+          ><button id="BugBtn">Bug reporter</button></a
+        >
+        <a
+          href="https://docs.google.com/forms/d/e/1FAIpQLScayLIDw7cRBk3w_aKL7so7jvtvpIFT_31QfvEEbzc7oAD6yA/viewform"
+          target="_blank"
+          ><button id="IdeaBtn">Idea Submission</button></a
+        >
         <span id="saveStatus"></span>
       </div>
       <div style="margin-top: 6px; font-size: 13px">
@@ -37,7 +68,7 @@
     <div class="overlay">
       <div id="startButton">pointer lock</div>
     </div>
-    
+
     <script src="https://unpkg.com/three@0.128.0/build/three.js"></script>
     <script src="https://unpkg.com/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/simplex-noise.min.js"></script>
