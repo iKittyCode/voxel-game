@@ -1,2 +1,2 @@
-# voxel-game
-A voxel game in vanilla HTML, CSS, and JavaScript
+# Voxel Game
+A voxel game made in vanilla HTML, CSS, and JavaScript
