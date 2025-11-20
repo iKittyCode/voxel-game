@@ -235,7 +235,7 @@ function animate(time) {
 
   // Main frame logic
   calculatePlayerMovement(deltaTime);
-  generateChunksAroundPlayer();
+  updateChunksAroundPlayer(true);
   updateDebug();
 
   // Render
@@ -694,7 +694,10 @@ function generateTree(x, y, z, cx, cz, rng) {
   }
 }
 
-/** Generate a chunk given its xz coordinates */
+/**
+ * Generate a chunk given its xz coordinates,
+ * returns true if generated and false if already there or reloaded
+ */
 function generateChunk(cx, cz) {
   const ck = chunkKey(cx, cz);
 
@@ -702,7 +705,7 @@ function generateChunk(cx, cz) {
   if (chunks[ck]) {
     // Chunk already generated, reload if needed and stop
     if (!chunks[ck].loaded) reloadChunk(chunks[ck]);
-    return;
+    return false;
   } else {
     // Chunk does not exist, create new one
     chunks[ck] = { blocks: {}, loaded: true, modified: false };
@@ -741,6 +744,8 @@ function generateChunk(cx, cz) {
       if (lrng() < TREE_CHANCE_PER_BLOCK) generateTree(wx, height, wz, cx, cz, lrng);
     }
   }
+
+  return true;
 }
 
 /** Unload a chunk, removing its mesh from the scene */
@@ -760,33 +765,39 @@ function reloadChunk(chunk) {
 }
 
 /** Generate, unload, and update chunks based on the player's position */
-function generateChunksAroundPlayer() {
+function updateChunksAroundPlayer(updateOne) {
   // Calculate the player's current chunk
   const px = Math.floor(position.x / CUBE_SIZE);
   const pz = Math.floor(position.z / CUBE_SIZE);
   const pcx = Math.floor(px / CHUNK_SIZE);
   const pcz = Math.floor(pz / CHUNK_SIZE);
 
-  // Update meshes and unload chunks
-  for (const [ck, chunk] of Object.entries(chunks)) {
+  // Generate nearby chunks with radius in a square formation
+  outer: for (let dx = -chunkRadius; dx <= chunkRadius; dx++) {
+    for (let dz = -chunkRadius; dz <= chunkRadius; dz++) {
+      const generated = generateChunk(pcx + dx, pcz + dz);
+      if (updateOne && generated) break outer;
+    }
+  }
+
+  // Update meshes
+  for (const chunk of Object.values(chunks)) {
     if (chunk.updateMesh) {
       scene.remove(chunk.mesh);
       generateChunkMesh(chunk);
       chunk.updateMesh = false;
-      chunk.loaded = false;
-    }
+      if (chunk.loaded) scene.add(chunk.mesh);
 
+      if (updateOne) break;
+    }
+  }
+
+  // Unload chunks
+  for (const [ck, chunk] of Object.entries(chunks)) {
     const [cx, cz] = keyToArray(ck);
     // Check if distance is too far
     if (Math.abs(cx - pcx) > chunkRadius || Math.abs(cz - pcz) > chunkRadius) {
       unloadChunk(chunk);
-    }
-  }
-
-  // Generate nearby chunks with radius in a square formation
-  for (let dx = -chunkRadius; dx <= chunkRadius; dx++) {
-    for (let dz = -chunkRadius; dz <= chunkRadius; dz++) {
-      generateChunk(pcx + dx, pcz + dz);
     }
   }
 }
@@ -959,7 +970,7 @@ function loadSaveCode1(save) {
   }
 
   // Generate chunks if needed
-  generateChunksAroundPlayer();
+  updateChunksAroundPlayer(false);
 }
 
 /** Load a version 0 save code */
@@ -1177,7 +1188,7 @@ try {
   getUserSeed();
   setupUI();
   init();
-  generateChunksAroundPlayer();
+  updateChunksAroundPlayer(false);
   animate();
 } catch (error) {
   prompt(
