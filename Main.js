@@ -41,7 +41,7 @@ let raycaster, mouse;
 
 // World & world gen
 // store chunks by key
-// { "cx,cz": { blocks: [{ id }] }, mesh, updateMesh, loaded, modified } }
+// { "cx,cz": { blocks: [{ id }], mesh, updateMesh, loaded, modified } }
 const chunks = {};
 const hitboxMaterial = new THREE.MeshBasicMaterial({ visible: false });
 const textureLoader = new THREE.TextureLoader();
@@ -70,9 +70,23 @@ let fps;
 
 /*************** UTILITY ***************/
 
+/** Calculate the positive modulus */
+function mod(n, m) {
+  return ((n % m) + m) % m;
+}
+
 /** Get the key of a block from xyz coords */
 function key(x, y, z) {
-  return `${x},${y},${z}`;
+  return (
+    (y - MIN_HEIGHT) * CHUNK_SIZE * CHUNK_SIZE +
+    mod(x, CHUNK_SIZE) * CHUNK_SIZE +
+    mod(z, CHUNK_SIZE)
+  );
+}
+
+/** Get the key of a blocks from chunk local xyz coords */
+function lkey(x, y, z) {
+  return (y - MIN_HEIGHT) * CHUNK_SIZE * CHUNK_SIZE + x * CHUNK_SIZE + z;
 }
 
 /** Get the key of a chunk from xz coords */
@@ -80,8 +94,16 @@ function chunkKey(cx, cz) {
   return `${cx},${cz}`;
 }
 
-/** Convert a block or chunk key to array */
+/** Convert a block key to array of local coords */
 function keyToArray(k) {
+  const x = Math.floor(k / CHUNK_SIZE) % CHUNK_SIZE;
+  const y = Math.floor(k / (CHUNK_SIZE * CHUNK_SIZE)) + MIN_HEIGHT;
+  const z = k % CHUNK_SIZE;
+  return [x, y, z];
+}
+
+/** Convert a chunk key to array */
+function chunkKeyToArray(k) {
   return k.split(",").map(n => parseInt(n));
 }
 
@@ -335,7 +357,8 @@ function correctCollision(moveDir, blockBB) {
   }
 }
 
-/** Checks if the player is colliding with the world,
+/**
+ * Checks if the player is colliding with the world,
  * returning the colliding block's bounding box if so,
  * returning false if not
  */
@@ -534,6 +557,17 @@ function onExportSave() {
 }
 
 /*************** WORLD & WORLD GEN ***************/
+/** Get local xz coords from world xz coords */
+function localCoords(x, z) {
+  return [mod(x, CHUNK_SIZE), mod(z, CHUNK_SIZE)];
+}
+
+/** Get the chunk coords from a block's xz coordinates */
+function blockChunkCoords(x, z) {
+  const cx = Math.floor(x / CHUNK_SIZE);
+  const cz = Math.floor(z / CHUNK_SIZE);
+  return [cx, cz];
+}
 
 /** Get the chunk key from a block's xz coordinates */
 function blockChunkKey(x, z) {
@@ -545,7 +579,9 @@ function blockChunkKey(x, z) {
 
 /** Get the chunk from a block's xz coordinates */
 function getBlockChunk(x, z) {
-  const ck = blockChunkKey(x, z);
+  const cx = Math.floor(x / CHUNK_SIZE);
+  const cz = Math.floor(z / CHUNK_SIZE);
+  const ck = chunkKey(cx, cz);
   return chunks[ck];
 }
 
@@ -553,6 +589,11 @@ function getBlockChunk(x, z) {
 function isBlockAt(x, y, z) {
   const chunk = getBlockChunk(x, z);
   return !!chunk.blocks[key(x, y, z)];
+}
+
+/** Determines if there is a block at the local coords */
+function isBlockAtLocal(x, y, z, chunk) {
+  return !!chunk.blocks[lkey(x, y, z)];
 }
 
 /** Determines if a block is in the chunk */
@@ -566,8 +607,10 @@ function isBlockInChunk(x, z, cx, cz) {
 
 /** Find the y of the top block */
 function findTopBlockY(x, z) {
+  const [lx, lz] = localCoords(x, z);
+  const chunk = getBlockChunk(x, z);
   for (let y = MAX_HEIGHT; y >= MIN_HEIGHT; y--) {
-    if (isBlockAt(x, y, z)) return y;
+    if (isBlockAtLocal(lx, y, lz, chunk)) return y;
   }
   return null;
 }
@@ -605,8 +648,9 @@ function placeBlock(id, x, y, z, generated = true) {
 
   if (!chunk) {
     // Chunk doesn't exist - generate it
-    const [cx, cz] = keyToArray(blockChunkKey(x, z));
+    const [cx, cz] = blockChunkCoords(x, z);
     generateChunk(cx, cz);
+    chunk = getBlockChunk(x, z);
   }
 
   placeBlockKnownChunk(id, x, y, z, chunk, generated);
@@ -705,7 +749,7 @@ function generateChunk(cx, cz) {
     return;
   } else {
     // Chunk does not exist, create new one
-    chunks[ck] = { blocks: {}, loaded: true, modified: false };
+    chunks[ck] = { blocks: [], loaded: true, modified: false };
   }
 
   const chunk = chunks[ck];
@@ -773,12 +817,12 @@ function generateChunksAroundPlayer() {
   for (const [ck, chunk] of Object.entries(chunks)) {
     if (chunk.updateMesh) {
       scene.remove(chunk.mesh);
-      generateChunkMesh(chunk);
+      generateChunkMesh(ck);
       chunk.updateMesh = false;
       chunk.loaded = false;
     }
 
-    const [cx, cz] = keyToArray(ck);
+    const [cx, cz] = chunkKeyToArray(ck);
     // Check if distance is too far
     if (Math.abs(cx - pcx) > chunkRadius || Math.abs(cz - pcz) > chunkRadius) {
       unloadChunk(chunk);
@@ -794,7 +838,12 @@ function generateChunksAroundPlayer() {
 }
 
 /** Generate a chunk's mesh */
-function generateChunkMesh(chunk) {
+function generateChunkMesh(ck) {
+  const chunk = chunks[ck];
+  const [cx, cz] = chunkKeyToArray(ck);
+  const cwx = cx * CHUNK_SIZE;
+  const cwz = cz * CHUNK_SIZE;
+
   const positions = []; // vertex position data
   const normals = []; // vertex normal data
   const indices = []; // vertex index data
@@ -854,8 +903,26 @@ function generateChunkMesh(chunk) {
   }
 
   // Calculate all faces we need
-  for (const [k, block] of Object.entries(chunk.blocks)) {
-    const [x, y, z] = keyToArray(k);
+
+  // Offsets for adjacent blocks
+  const oxn = -CHUNK_SIZE;
+  const oxp = CHUNK_SIZE;
+  const oyn = -CHUNK_SIZE * CHUNK_SIZE;
+  const oyp = CHUNK_SIZE * CHUNK_SIZE;
+  const ozn = -1;
+  const ozp = 1;
+
+  // Limits for checking adjacent blocks to prevent checking the next row
+  const lxn = cwx;
+  const lxp = cwx + CHUNK_SIZE - 1;
+  const lzn = cwz;
+  const lzp = cwz + CHUNK_SIZE - 1;
+
+  chunk.blocks.forEach((block, k) => {
+    // Calculate world coords
+    const x = (Math.floor(k / CHUNK_SIZE) % CHUNK_SIZE) + cwx;
+    const y = Math.floor(k / (CHUNK_SIZE * CHUNK_SIZE)) + MIN_HEIGHT;
+    const z = (k % CHUNK_SIZE) + cwz;
 
     // Record new block ids
     if (!facesByID[block.id]) {
@@ -863,13 +930,13 @@ function generateChunkMesh(chunk) {
     }
 
     // Check surrondings and add faces only if needed
-    if (!chunk.blocks[key(x - 1, y, z)]) facesByID[block.id][5].push(x, y, z);
-    if (!chunk.blocks[key(x + 1, y, z)]) facesByID[block.id][3].push(x, y, z);
-    if (!chunk.blocks[key(x, y - 1, z)]) facesByID[block.id][1].push(x, y, z);
-    if (!chunk.blocks[key(x, y + 1, z)]) facesByID[block.id][0].push(x, y, z);
-    if (!chunk.blocks[key(x, y, z - 1)]) facesByID[block.id][2].push(x, y, z);
-    if (!chunk.blocks[key(x, y, z + 1)]) facesByID[block.id][4].push(x, y, z);
-  }
+    if (!(chunk.blocks[k + oxn] && x > lxn)) facesByID[block.id][5].push(x, y, z);
+    if (!(chunk.blocks[k + oxp] && x < lxp)) facesByID[block.id][3].push(x, y, z);
+    if (!chunk.blocks[k + oyn]) facesByID[block.id][1].push(x, y, z);
+    if (!chunk.blocks[k + oyp]) facesByID[block.id][0].push(x, y, z);
+    if (!(chunk.blocks[k + ozn] && z > lzn)) facesByID[block.id][2].push(x, y, z);
+    if (!(chunk.blocks[k + ozp] && z < lzp)) facesByID[block.id][4].push(x, y, z);
+  });
 
   // Construct the faces calculated above
   for (const [blockID, blockFaces] of Object.entries(facesByID)) {
@@ -903,7 +970,7 @@ function generateSaveCode() {
   for (const [ck, chunk] of Object.entries(chunks)) {
     if (chunk.modified) {
       chunksEncoded[ck] = {
-        blocks: generateChunkSaveCode(ck, chunk),
+        blocks: generateChunkSaveCode(chunk),
         modified: true,
       };
     }
@@ -956,7 +1023,7 @@ function loadSaveCode1(save) {
   // Decode and add new chunks
   for (const [ck, chunk] of Object.entries(save.chunks)) {
     chunks[ck] = {
-      blocks: decodeChunkSaveCode(ck, chunk.blocks),
+      blocks: decodeChunkSaveCode(chunk.blocks),
       loaded: false,
       updateMesh: true,
       modified: chunk.modified,
@@ -988,7 +1055,7 @@ function loadSaveCode0(save) {
     // Ungenerated chunks no longer supported, don't add to be generated
     if (!chunk.generated) continue;
     chunks[ck] = {
-      blocks: decodeChunkSaveCode(ck, chunk.blocks),
+      blocks: decodeChunkSaveCode(chunk.blocks),
       loaded: false,
       updateMesh: true,
       modified: true,
@@ -997,9 +1064,7 @@ function loadSaveCode0(save) {
 }
 
 /** Generate a save code for a single chunk */
-function generateChunkSaveCode(ck, chunk) {
-  const [cx, cz] = keyToArray(ck);
-
+function generateChunkSaveCode(chunk) {
   let code = "";
   let lastBlockID = null;
   let repeatCount = 0;
@@ -1016,10 +1081,8 @@ function generateChunkSaveCode(ck, chunk) {
   for (let y = MIN_HEIGHT; y <= MAX_HEIGHT; y++) {
     for (let x = 0; x < CHUNK_SIZE; x++) {
       for (let z = 0; z < CHUNK_SIZE; z++) {
-        // Get block coordinates
-        const wx = cx * CHUNK_SIZE + x;
-        const wz = cz * CHUNK_SIZE + z;
-        const k = key(wx, y, wz);
+        // Get block key
+        const k = lkey(x, y, z);
 
         // Determine block id
         let id;
@@ -1043,28 +1106,14 @@ function generateChunkSaveCode(ck, chunk) {
   }
 
   // Add the last repeat group to the code
-  addToCode();
+  if (lastBlockID !== 4095) addToCode();
 
   return code;
 }
 
 /** Decodes a save code for a chunk and returns the blocks object for that chunk */
-function decodeChunkSaveCode(ck, code) {
-  const [cx, cz] = keyToArray(ck);
-
-  // Helper function to determine the block key from the index in the chunk's blocks
-  function idxToKey(idx) {
-    const x = Math.floor(idx / CHUNK_SIZE) % CHUNK_SIZE;
-    const y = Math.floor(idx / (CHUNK_SIZE * CHUNK_SIZE)) + MIN_HEIGHT;
-    const z = idx % CHUNK_SIZE;
-
-    const wx = CHUNK_SIZE * cx + x;
-    const wz = CHUNK_SIZE * cz + z;
-    return key(wx, y, wz);
-  }
-
-  const blocks = {};
-  let idx = 0;
+function decodeChunkSaveCode(code) {
+  const blocks = [];
 
   // Loop through the code 1 repeat block (4 chars) at a time
   for (let i = 0; i < code.length; i += 4) {
@@ -1073,10 +1122,8 @@ function decodeChunkSaveCode(ck, code) {
     const repeat = (base64num(code[i + 2]) << 6) | base64num(code[i + 3]);
 
     // Add blocks according to the repeat
-    for (let j = 0; j < repeat; j++) {
-      const k = idxToKey(idx++);
-      if (blockID < 4095) blocks[k] = { id: blockID };
-    }
+    if (blockID === 4095) blocks.length += repeat;
+    else blocks.push(...Array.from({ length: repeat }, () => ({ id: blockID })));
   }
 
   return blocks;
