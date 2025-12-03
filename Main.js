@@ -390,7 +390,7 @@ function isPlayerColliding() {
 
 /**
  * Determine if the player collides with a block in that position,
- * returnomg the block's bounding box if so,
+ * returning the block's bounding box if so,
  * returning false if not
  */
 function playerCollidesBlock(x, y, z) {
@@ -698,7 +698,7 @@ function placeBlockLocal(id, x, y, z, chunk, generated = true) {
 
 /** Remove a block with local coordinates in a chunk */
 function removeBlockLocal(x, y, z, chunk, generated = true) {
-  const k = key(x, y, z);
+  const k = lkey(x, y, z);
 
   // Stop if block doesn't exist
   if (!chunk.blocks[k]) return;
@@ -962,7 +962,7 @@ function generateChunkMesh(ck) {
       facesByID[block.id] = [[], [], [], [], [], []];
     }
 
-    // Check surrondings and add faces only if needed
+    // Check surroundings and add faces only if needed
     if (!(chunk.blocks[k + oxn] && x > lxn)) facesByID[block.id][5].push(x, y, z);
     if (!(chunk.blocks[k + oxp] && x < lxp)) facesByID[block.id][3].push(x, y, z);
     if (!chunk.blocks[k + oyn]) facesByID[block.id][1].push(x, y, z);
