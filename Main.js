@@ -63,7 +63,7 @@ const moveControls = {
   crouch: false,
   sprint: false,
 };
-let position = new THREE.Vector3(0, TERRAIN_HEIGHT + 1, 0);
+let position;
 let rotation = new THREE.Euler();
 let velocity = new THREE.Vector3();
 let speed = PLAYER_SPEED;
@@ -75,6 +75,7 @@ let isDoubleTapSprinting = false;
 
 // UI
 const mainMenu = document.getElementById("main-menu");
+const pauseMenu = document.getElementById("pause-menu");
 const gameElem = document.getElementById("game");
 
 // Misc
@@ -262,7 +263,7 @@ function generateNoiseFunction(noiseSeed) {
 
 /** Function called every frame for processing and rendering */
 function animate(time) {
-  requestAnimationFrame(animate);
+  requestAnimationFrame(withErrorHandling(animate));
   if (!playing) return;
 
   // Calculate delta time
@@ -597,7 +598,6 @@ function onCreate() {
 function onSave() {
   const save = generateSaveCode();
   localStorage.setItem("save", save);
-  alert("Saved!");
 }
 
 /** Callback for clicking load button */
@@ -632,6 +632,37 @@ function onExportSave() {
   navigator.clipboard.writeText(save).then(() => {
     alert("Save copied to clipboard!");
   });
+}
+
+/** Callback for pointer lock change */
+function onPointerLockChange() {
+  if (controls.isLocked) {
+    // Unpause game
+    pauseMenu.style.display = "none";
+  } else {
+    // Pause game
+    pauseMenu.style.display = "block";
+
+    // Release all keys
+    for (const k of Object.keys(moveControls)) moveControls[k] = false;
+  }
+}
+
+/** Callback for clicking resume button */
+function onResume() {
+  controls.lock();
+}
+
+/** Callback for clicking settings button */
+function onOpenSettings() {
+  alert("no settings yet :)");
+}
+
+/** Callback for clicking quit button */
+function onQuitWorld() {
+  destroyWorld();
+  pauseMenu.style.display = "none";
+  mainMenu.style.display = "block";
 }
 
 /*************** WORLD & WORLD GEN ***************/
@@ -697,6 +728,8 @@ function findTopBlockY(x, z) {
 /** Create a new world */
 function createWorld() {
   initWorld();
+  position = new THREE.Vector3(0, TERRAIN_HEIGHT + 1, 0);
+  controls.getObject().rotation.set(0, 0, 0);
   updateChunksAroundPlayer(false);
   controls.lock();
 }
@@ -724,6 +757,7 @@ function destroyWorld() {
     }
     delete chunks[ck];
   }
+  playing = false;
 }
 
 /** Create a hitbox for a block */
@@ -1280,16 +1314,40 @@ function decodeChunkSaveCode(code) {
 /** Setup all UI */
 function setupUI() {
   setupMainMenu();
+  setupPauseMenu();
 }
 
+/** Setup the main menu */
 function setupMainMenu() {
   const createButton = document.getElementById("main-create");
   const loadButton = document.getElementById("main-load");
   const importButton = document.getElementById("main-import");
+  const settingsButton = document.getElementById("main-settings");
 
   createButton.onclick = withErrorHandling(onCreate);
   loadButton.onclick = withErrorHandling(onLoadSave);
   importButton.onclick = withErrorHandling(onImportSave);
+  settingsButton.onclick = withErrorHandling(onOpenSettings);
+}
+
+/** Setup the pause menu */
+function setupPauseMenu() {
+  pauseMenu.style.display = "none";
+
+  // Pause on exit pointer lock
+  document.addEventListener("pointerlockchange", withErrorHandling(onPointerLockChange));
+
+  const resumeButton = document.getElementById("pause-resume");
+  const saveButton = document.getElementById("pause-save");
+  const exportButton = document.getElementById("pause-export");
+  const settingsButton = document.getElementById("pause-settings");
+  const quitButton = document.getElementById("pause-quit");
+
+  resumeButton.onclick = withErrorHandling(onResume);
+  saveButton.onclick = withErrorHandling(onSave);
+  exportButton.onclick = withErrorHandling(onExportSave);
+  settingsButton.onclick = withErrorHandling(onOpenSettings);
+  quitButton.onclick = withErrorHandling(onQuitWorld);
 }
 
 /** Update the debug text */
