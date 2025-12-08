@@ -78,6 +78,7 @@ const mainMenu = document.getElementById("main-menu");
 const pauseMenu = document.getElementById("pause-menu");
 const settingsMenu = document.getElementById("settings-menu");
 const createMenu = document.getElementById("create-menu");
+const importMenu = document.getElementById("import-menu");
 const gameElem = document.getElementById("game");
 
 // Misc
@@ -594,6 +595,11 @@ function onMainCreate() {
   createMenu.style.display = "flex";
 }
 
+/** Callback for clicking import button on main menu */
+function onMainImport() {
+  importMenu.style.display = "flex";
+}
+
 /** Callback for clicking create button */
 function onCreate() {
   const seedInput = document.getElementById("create-seed");
@@ -629,8 +635,10 @@ function onClearSave() {
 
 /** Callback for clicking import button */
 function onImportSave() {
-  const save = prompt("Enter your save here:");
+  const saveInput = document.getElementById("import-code");
+  const save = saveInput.value;
   if (save) {
+    importMenu.style.display = "none";
     mainMenu.style.display = "none";
     loadWorld(save);
   }
@@ -671,6 +679,16 @@ function onOpenSettings() {
 /** Callback for closing settings */
 function onCloseSettings() {
   settingsMenu.style.display = "none";
+}
+
+/** Callback for closing world creation menu */
+function onCloseCreate() {
+  createMenu.style.display = "none";
+}
+
+/** Callback for closing save import menu */
+function onCloseImport() {
+  importMenu.style.display = "none";
 }
 
 /** Callback for clicking quit button */
@@ -1336,6 +1354,7 @@ function setupUI() {
   setupPauseMenu();
   setupSettings();
   setupCreateMenu();
+  setupImportMenu();
 }
 
 /** Setup the main menu */
@@ -1347,7 +1366,7 @@ function setupMainMenu() {
 
   createButton.onclick = withErrorHandling(onMainCreate);
   loadButton.onclick = withErrorHandling(onLoadSave);
-  importButton.onclick = withErrorHandling(onImportSave);
+  importButton.onclick = withErrorHandling(onMainImport);
   settingsButton.onclick = withErrorHandling(onOpenSettings);
 }
 
@@ -1391,8 +1410,21 @@ function setupCreateMenu() {
   createMenu.style.display = "none";
 
   const create = document.getElementById("create-create");
+  const back = document.getElementById("create-back");
 
   create.onclick = withErrorHandling(onCreate);
+  back.onclick = withErrorHandling(onCloseCreate);
+}
+
+/** Setup the import menu */
+function setupImportMenu() {
+  importMenu.style.display = "none";
+
+  const importButton = document.getElementById("import-import");
+  const back = document.getElementById("import-back");
+
+  importButton.onclick = withErrorHandling(onImportSave);
+  back.onclick = withErrorHandling(onCloseImport);
 }
 
 /** Update the debug text */
