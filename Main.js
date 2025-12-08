@@ -77,6 +77,7 @@ let isDoubleTapSprinting = false;
 const mainMenu = document.getElementById("main-menu");
 const pauseMenu = document.getElementById("pause-menu");
 const settingsMenu = document.getElementById("settings-menu");
+const createMenu = document.getElementById("create-menu");
 const gameElem = document.getElementById("game");
 
 // Misc
@@ -588,10 +589,18 @@ function onMouseDown(event) {
   for (const hitbox of blockHitboxes) hitbox.geometry.dispose();
 }
 
+/** Callback for clicking create button on main menu */
+function onMainCreate() {
+  createMenu.style.display = "flex";
+}
+
 /** Callback for clicking create button */
 function onCreate() {
-  getUserSeed();
+  const seedInput = document.getElementById("create-seed");
+  createMenu.style.display = "none";
   mainMenu.style.display = "none";
+  seed = seedInput.value;
+  if (!seed) seed = Math.floor(Math.random() * 1000000000000000).toString();
   createWorld();
 }
 
@@ -1326,6 +1335,7 @@ function setupUI() {
   setupMainMenu();
   setupPauseMenu();
   setupSettings();
+  setupCreateMenu();
 }
 
 /** Setup the main menu */
@@ -1335,7 +1345,7 @@ function setupMainMenu() {
   const importButton = document.getElementById("main-import");
   const settingsButton = document.getElementById("main-settings");
 
-  createButton.onclick = withErrorHandling(onCreate);
+  createButton.onclick = withErrorHandling(onMainCreate);
   loadButton.onclick = withErrorHandling(onLoadSave);
   importButton.onclick = withErrorHandling(onImportSave);
   settingsButton.onclick = withErrorHandling(onOpenSettings);
@@ -1376,6 +1386,15 @@ function setupSettings() {
   back.onclick = withErrorHandling(onCloseSettings);
 }
 
+/** Setup the world creation menu */
+function setupCreateMenu() {
+  createMenu.style.display = "none";
+
+  const create = document.getElementById("create-create");
+
+  create.onclick = withErrorHandling(onCreate);
+}
+
 /** Update the debug text */
 function updateDebug() {
   const debug = document.getElementById("debug");
@@ -1393,12 +1412,6 @@ function updateDebug() {
 }
 
 /*************** MISC ***************/
-
-/** Get a seed from the user */
-function getUserSeed() {
-  seed = prompt("Enter a seed or leave blank for a random one");
-  if (!seed) seed = Math.floor(Math.random() * 1000000000000000).toString();
-}
 
 /** Wraps the function with error handling */
 function withErrorHandling(func) {

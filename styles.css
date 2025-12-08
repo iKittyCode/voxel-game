@@ -37,8 +37,13 @@ body {
   font-size: 20pt;
 }
 
-.menu input[type="range"] {
+.menu input[type=range] {
   width: 200px;
+}
+
+.menu input[type=text] {
+  font-size: 20pt;
+  background-color: #ccc;
 }
 
 .menu a {
