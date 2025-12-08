@@ -78,7 +78,9 @@ const mainMenu = document.getElementById("main-menu");
 const pauseMenu = document.getElementById("pause-menu");
 const settingsMenu = document.getElementById("settings-menu");
 const createMenu = document.getElementById("create-menu");
+const createSeedInput = document.getElementById("create-seed");
 const importMenu = document.getElementById("import-menu");
+const importSaveInput = document.getElementById("import-code");
 const gameElem = document.getElementById("game");
 
 // Misc
@@ -593,19 +595,20 @@ function onMouseDown(event) {
 /** Callback for clicking create button on main menu */
 function onMainCreate() {
   createMenu.style.display = "flex";
+  createSeedInput.value = "";
 }
 
 /** Callback for clicking import button on main menu */
 function onMainImport() {
   importMenu.style.display = "flex";
+  importSaveInput.value = "";
 }
 
 /** Callback for clicking create button */
 function onCreate() {
-  const seedInput = document.getElementById("create-seed");
   createMenu.style.display = "none";
   mainMenu.style.display = "none";
-  seed = seedInput.value;
+  seed = createSeedInput.value;
   if (!seed) seed = Math.floor(Math.random() * 1000000000000000).toString();
   createWorld();
 }
@@ -635,8 +638,7 @@ function onClearSave() {
 
 /** Callback for clicking import button */
 function onImportSave() {
-  const saveInput = document.getElementById("import-code");
-  const save = saveInput.value;
+  const save = importSaveInput.value;
   if (save) {
     importMenu.style.display = "none";
     mainMenu.style.display = "none";
