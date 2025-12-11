@@ -68,12 +68,13 @@ let rotation = new THREE.Euler();
 let velocity = new THREE.Vector3();
 let speed = PLAYER_SPEED;
 let canJump = false;
-let currentBlock = 0; // grass
+let selectedBlock = 0; // grass
 let camOffset = CAM_OFFSET.clone();
 let sprintTapLastTime = 0;
 let isDoubleTapSprinting = false;
 
 // UI
+const hotbar = document.getElementById("hotbar");
 const mainMenu = document.getElementById("main-menu");
 const pauseMenu = document.getElementById("pause-menu");
 const settingsMenu = document.getElementById("settings-menu");
@@ -202,6 +203,7 @@ function init() {
   window.addEventListener("resize", withErrorHandling(onWindowResize), false);
   renderer.domElement.addEventListener("contextmenu", e => e.preventDefault());
   document.addEventListener("mousedown", withErrorHandling(onMouseDown), false);
+  document.addEventListener("wheel", withErrorHandling(onScroll));
   document.addEventListener("keydown", withErrorHandling(onKeyDown), false);
   document.addEventListener("keyup", withErrorHandling(onKeyUp), false);
 
@@ -509,6 +511,28 @@ function onKeyDown(event) {
       moveControls.sprint = true;
       isDoubleTapSprinting = false;
       break;
+
+    // Hotbar
+    case "Digit1":
+      selectedBlock = 0;
+      updateHotbar();
+      break;
+    case "Digit2":
+      selectedBlock = 1;
+      updateHotbar();
+      break;
+    case "Digit3":
+      selectedBlock = 2;
+      updateHotbar();
+      break;
+    case "Digit4":
+      selectedBlock = 3;
+      updateHotbar();
+      break;
+    case "Digit5":
+      selectedBlock = 4;
+      updateHotbar();
+      break;
   }
 }
 
@@ -583,13 +607,21 @@ function onMouseDown(event) {
 
       // Prevent placing inside player
       if (!playerCollidesBlock(placeX, placeY, placeZ)) {
-        placeBlock(currentBlock, placeX, placeY, placeZ, false);
+        placeBlock(selectedBlock, placeX, placeY, placeZ, false);
       }
     }
   }
 
   // Dispose hitbox geometries
   for (const hitbox of blockHitboxes) hitbox.geometry.dispose();
+}
+
+/** Callback for mouse scroll */
+function onScroll(event) {
+  if (event.deltaY > 0) selectedBlock++;
+  else selectedBlock--;
+  selectedBlock = mod(selectedBlock, BLOCK_TYPES.length);
+  updateHotbar();
 }
 
 /** Callback for clicking create button on main menu */
@@ -1352,11 +1384,33 @@ function decodeChunkSaveCode(code) {
 
 /** Setup all UI */
 function setupUI() {
+  setupHotbar();
   setupMainMenu();
   setupPauseMenu();
   setupSettings();
   setupCreateMenu();
   setupImportMenu();
+}
+
+/** Setup the hotbar */
+function setupHotbar() {
+  BLOCK_TYPES.forEach((blockType, i) => {
+    // Create elements
+    const slot = document.createElement("div");
+    const img = document.createElement("img");
+
+    // Get image source
+    let texPath = blockType.texPaths[2];
+    if (typeof texPath === "number") texPath = blockType.texPaths[texPath];
+    img.src = texPath;
+
+    // Select first
+    if (i === 0) slot.classList.add("selected");
+
+    // Add elements
+    slot.appendChild(img);
+    hotbar.appendChild(slot);
+  });
 }
 
 /** Setup the main menu */
@@ -1427,6 +1481,15 @@ function setupImportMenu() {
 
   importButton.onclick = withErrorHandling(onImportSave);
   back.onclick = withErrorHandling(onCloseImport);
+}
+
+/** Update the hotbar to reflect the selected block */
+function updateHotbar() {
+  // Deselect all slots
+  for (const slot of hotbar.children) slot.classList.remove("selected");
+
+  // Select the corresponding slot
+  hotbar.children[selectedBlock].classList.add("selected");
 }
 
 /** Update the debug text */
