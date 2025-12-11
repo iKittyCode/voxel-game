@@ -4,6 +4,7 @@ body {
   margin: 0;
   overflow: hidden;
   font-family: Arial, sans-serif;
+  image-rendering: pixelated;
 }
 
 .menu {
@@ -21,16 +22,18 @@ body {
 
 .menu button {
   display: block;
+  height: 40px;
+  aspect-ratio: 58 / 8;
   margin: 10px 0px;
-  padding: 5px 20px;
-  border: 3px solid #222;
-  border-radius: 5px;
-  background-color: #666;
+  border: none;
+  padding: 0px;
+  background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADoAAAAICAIAAAAna3vZAAAAA3NCSVQICAjb4U/gAAAAOUlEQVQ4jWN8s7+RYegAFgYGhjf3zg60M4gCN178YRpoN5AGRp1LSzDqXFoCFgYGhhsv/gy0M4gFAH/hCk9WRJh0AAAAAElFTkSuQmCC");
+  background-size: contain;
   font-size: 20pt;
 }
 
 .menu button:hover {
-  background-color: #999;
+  filter: brightness(0.7);
 }
 
 .menu label {
@@ -91,7 +94,6 @@ body {
   width: 48px;
   height: 48px;
   margin: 6px;
-  image-rendering: pixelated;
 }
 
 #crosshair {
