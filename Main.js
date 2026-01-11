@@ -89,12 +89,17 @@ let isDoubleTapSprinting = false;
 
 // UI
 let isUIVisible = true;
+const debugElem = document.getElementById("debug");
 const hotbar = document.getElementById("hotbar");
+const crosshair = document.getElementById("crosshair");
 const mainMenu = document.getElementById("main-menu");
 const pauseMenu = document.getElementById("pause-menu");
 const settingsMenu = document.getElementById("settings-menu");
 const createMenu = document.getElementById("create-menu");
 const createSeedInput = document.getElementById("create-seed");
+const createNameInput = document.getElementById("create-name");
+const loadMenu = document.getElementById("load-menu");
+const loadMenuList = document.getElementById("load-list");
 const importMenu = document.getElementById("import-menu");
 const importSaveInput = document.getElementById("import-code");
 const gameElem = document.getElementById("game");
@@ -664,9 +669,7 @@ function onScroll(event) {
 function onMainCreate() {
   createMenu.style.display = "flex";
   createSeedInput.value = "";
-  // Reset the name input if it exists
-  const nameInput = document.getElementById("create-name");
-  if (nameInput) nameInput.value = "";
+  createNameInput.value = "";
 }
 
 /** Open the main import menu */
@@ -677,26 +680,22 @@ function onMainImport() {
 
 /** Create world */
 function onCreate() {
-  const nameInput = document.getElementById("create-name");
-  const nameVal = nameInput ? nameInput.value.trim() : "Untitled";
+  let nameVal = createNameInput.value.trim();
 
-  if (!nameVal) {
-    alert("Please enter a world name.");
-    return;
-  }
+  if (!nameVal) nameVal = "New World";
 
   // Check if overwrite
   if (localStorage.getItem(SAVE_PREFIX + nameVal)) {
-    if (!confirm("A world with this name already exists. Overwrite?")) return;
+    if (!confirm(`A world with the name ${nameVal} already exists. Overwrite?`)) return;
   }
 
   currentWorldName = nameVal;
   seed = createSeedInput.value;
+  if (!seed) seed = Math.floor(Math.random() * 1000000000000000).toString();
 
   createMenu.style.display = "none";
   mainMenu.style.display = "none";
 
-  if (!seed) seed = Math.floor(Math.random() * 1000000000000000).toString();
   createWorld();
 }
 
@@ -704,75 +703,67 @@ function onCreate() {
 function onSave() {
   const save = generateSaveCode();
   localStorage.setItem(SAVE_PREFIX + currentWorldName, save);
-  alert(`Game saved as "${currentWorldName}"!`);
 }
 
 /** Open the new load menu and populate list */
 function onOpenLoadMenu() {
   mainMenu.style.display = "none";
-  const loadMenu = document.getElementById("load-menu");
   loadMenu.style.display = "flex";
-
-  const list = document.getElementById("load-list");
-  list.innerHTML = "";
+  loadMenuList.innerHTML = "";
 
   let foundSaves = false;
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (key.startsWith(SAVE_PREFIX)) {
       foundSaves = true;
+
       const worldName = key.replace(SAVE_PREFIX, "");
 
       const row = document.createElement("div");
-      row.style.cssText =
-        "display: flex; justify-content: space-between; margin: 5px 0; background: rgba(0,0,0,0.3); padding: 5px;";
-
       const nameLabel = document.createElement("span");
-      nameLabel.textContent = worldName;
-      nameLabel.style.cssText = "color: white; padding: 5px; font-size: 18px;";
-
       const btnGroup = document.createElement("div");
+
+      row.classList.add("load-menu-row");
+      nameLabel.textContent = worldName;
 
       // Load Button
       const loadBtn = document.createElement("button");
       loadBtn.textContent = "Play";
-      loadBtn.style.fontSize = "14px";
-      loadBtn.onclick = () => {
+      loadBtn.onclick = withErrorHandling(() => {
         currentWorldName = worldName;
         const saveCode = localStorage.getItem(key);
-        document.getElementById("load-menu").style.display = "none";
+        loadMenu.style.display = "none";
         loadWorld(saveCode);
-      };
+      });
 
       // Delete Button
       const delBtn = document.createElement("button");
       delBtn.textContent = "Delete";
-      delBtn.style.fontSize = "14px";
-      delBtn.style.backgroundColor = "#ff4444";
-      delBtn.style.marginLeft = "5px";
-      delBtn.onclick = () => {
+      delBtn.onclick = withErrorHandling(() => {
         if (confirm(`Are you sure you want to delete "${worldName}"?`)) {
           localStorage.removeItem(key);
-          onOpenLoadMenu(); // Refresh list
+          onOpenLoadMenu(); // refresh list
         }
-      };
+      });
 
       btnGroup.appendChild(loadBtn);
       btnGroup.appendChild(delBtn);
       row.appendChild(nameLabel);
       row.appendChild(btnGroup);
-      list.appendChild(row);
+      loadMenuList.appendChild(row);
     }
   }
 
   if (!foundSaves) {
-    list.innerHTML = "<p style='color: white;'>No saved worlds found.</p>";
+    const msg = doucment.createElement("p");
+    msg.textContent = "No saved worlds found.";
+    loadMenuList.appendChild(msg);
   }
 }
 
 /** Close the load menu */
 function onCloseLoadMenu() {
-  document.getElementById("load-menu").style.display = "none";
+  loadMenu.style.display = "none";
   mainMenu.style.display = "flex";
 }
 
@@ -1520,6 +1511,7 @@ function setupUI() {
   setupPauseMenu();
   setupSettings();
   setupCreateMenu();
+  setupLoadMenu();
   setupImportMenu();
 }
 
@@ -1555,18 +1547,11 @@ function setupMainMenu() {
   const loadButton = document.getElementById("main-load");
   const importButton = document.getElementById("main-import");
   const settingsButton = document.getElementById("main-settings");
-  const loadBackButton = document.getElementById("load-back");
 
   createButton.onclick = withErrorHandling(onMainCreate);
   loadButton.onclick = withErrorHandling(onOpenLoadMenu);
   importButton.onclick = withErrorHandling(onMainImport);
   settingsButton.onclick = withErrorHandling(onOpenSettings);
-
-  if (loadBackButton) {
-    loadBackButton.onclick = withErrorHandling(onCloseLoadMenu);
-  } else {
-    console.warn("Load back button not found! Did you update index.html?");
-  }
 }
 
 /** Setup the pause menu */
@@ -1615,6 +1600,15 @@ function setupCreateMenu() {
   back.onclick = withErrorHandling(onCloseCreate);
 }
 
+/** Setup the load menu with world selection */
+function setupLoadMenu() {
+  loadMenu.style.display = "none";
+
+  const loadBackButton = document.getElementById("load-back");
+
+  loadBackButton.onclick = withErrorHandling(onCloseLoadMenu);
+}
+
 /** Setup the import menu */
 function setupImportMenu() {
   importMenu.style.display = "none";
@@ -1648,17 +1642,16 @@ function updateDebug() {
   `;
 }
 
-// TOGGLE UI VISIBILITY
+/** Toggle UI visibility */
 function toggleUI() {
   isUIVisible = !isUIVisible;
   // If visible, clear the inline style so CSS takes over. If not, set to none.
   const displayStyle = isUIVisible ? "" : "none";
 
-  const hudElements = ["hotbar", "crosshair", "debug"];
+  const hudElements = [debugElem, hotbar, crosshair];
 
-  hudElements.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = displayStyle;
+  hudElements.forEach(el => {
+    el.style.display = displayStyle;
   });
 }
 

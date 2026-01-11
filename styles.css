@@ -61,6 +61,33 @@ body {
   background-color: #0008;
 }
 
+#load-list {
+  max-height: 700px;
+  overflow-y: auto;
+  width: 100%;
+  margin-bottom: 20px;
+  border: 1px solid #ccc;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+#load-list p {
+  color: white;
+}
+
+.load-menu-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 5px 0;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 5px;
+}
+
+.load-menu-row span {
+  color: white;
+  padding: 5px;
+  font-size: 20pt;
+}
+
 #game {
   position: relative;
 }
