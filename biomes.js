@@ -1,0 +1,69 @@
+// ==========================================
+// BIOME CONFIGURATION
+// ==========================================
+
+const WORLD_SETTINGS = {
+  biomeScale: 1500, // Larger number = Bigger Biomes
+  blendDistance: 0.5, // How smooth the transition is (0.0 to 0.5)
+};
+
+const BIOME_LIST = [
+  {
+    id: "hills",
+    name: "Grassy Hills",
+    temperature: -0.2,
+
+    // BLOCKS
+    blocks: {
+      surface: "grass",
+      subsurface: "dirt",
+      deep: "stone",
+    },
+
+    // TERRAIN
+    terrain: {
+      baseHeight: 60,
+      intensities: [24, 8, 4, 2, 1],
+      resolutions: [0.003, 0.01, 0.02, 0.05, 0.1],
+    },
+
+    // TREES
+    trees: {
+      chance: 0.005,
+      canopyRadius: 3,
+      trunkHeightMin: 6,
+      trunkHeightMax: 8,
+      wood: "wood",
+      leaves: "leaves",
+    },
+  },
+  {
+    id: "mountains",
+    name: "Extreme Mountains",
+    temperature: 0.5,
+
+    // BLOCKS
+    blocks: {
+      surface: "grass",
+      subsurface: "dirt",
+      deep: "stone",
+    },
+
+    // TERRAIN
+    terrain: {
+      baseHeight: 70,
+      intensities: [70, 24, 8, 4, 2, 1],
+      resolutions: [0.003, 0.01, 0.02, 0.05, 0.1],
+    },
+
+    // TREES
+    trees: {
+      chance: 0.001,
+      canopyRadius: 3,
+      trunkHeightMin: 6,
+      trunkHeightMax: 8,
+      wood: "wood",
+      leaves: "leaves",
+    },
+  },
+];

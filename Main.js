@@ -19,15 +19,9 @@ const CAVE_MAX_HEIGHT = 100;
 const CAVE_INTENSITIES = [15, 5, 1];
 const CAVE_RESOLUTIONS = [0.01, 0.05, 0.2];
 const MIN_HEIGHT = 0;
-const MAX_HEIGHT = 160;
+const MAX_HEIGHT = 250;
 const CHUNK_SIZE = 16;
-const TERRAIN_HEIGHT = 80; // this will affect spawn height as well
-const TERRAIN_INTENSITIES = [24, 8, 4, 2, 1];
-const TERRAIN_RESOLUTIONS = [0.003, 0.01, 0.02, 0.05, 0.1];
 const TREE_CANOPY_RADIUS = 3;
-// Controls how quickly leaf density decreases going further away from the center
-const TREE_FOLIAGE_FALLOFF = 0.2;
-const TREE_CHANCE_PER_BLOCK = 0.002;
 
 const PLAYER_SPEED = 4;
 const PLAYER_SPRINT_SPEED = 7;
@@ -60,7 +54,7 @@ const hitboxMaterial = new THREE.MeshBasicMaterial({ visible: false });
 const textureLoader = new THREE.TextureLoader();
 let chunkDistance = 5;
 let seed;
-let terrainHeightNoise;
+let biomeNoise;
 let caveNoise;
 
 // Save system variables
@@ -143,19 +137,9 @@ function chunkKeyToArray(k) {
   return k.split(",").map(n => parseInt(n));
 }
 
-/** Get the chunk's generation rng from xz coords */
-function chunkRng(cx, cz) {
-  return new Alea(`${seed},${cx},${cz}`);
-}
-
 /** Get a location's generation rng from block xz coords */
 function locationRng(x, z) {
   return new Alea(`${seed},${x},_,${z}`);
-}
-
-/** Get a block's generation rng from xyz coords */
-function blockRng(x, y, z) {
-  return new Alea(`${seed},${x},${y},${z}`);
 }
 
 /** Convert a number 0-63 to its base64 representation character */
@@ -268,28 +252,33 @@ function generateBlockMaterials() {
 
 /** Generate the noise functions */
 function generateNoiseFunctions(noiseSeed) {
-  // Generate individual functions
   const rng = new Alea(noiseSeed);
-  const terrainNoiseFuncs = TERRAIN_INTENSITIES.map(_ => createNoise2D(new Alea(rng())));
+
+  // 1. Biome Map Noise
+  const biomeRng = new Alea(noiseSeed + "_biome");
+  const biomeSimplex = createNoise2D(biomeRng);
+  const bScale = WORLD_SETTINGS.biomeScale;
+  biomeNoise = (x, z) => biomeSimplex(x / bScale, z / bScale);
+
+  // 2. Per-Biome Noise Arrays
+  BIOME_LIST.forEach(biome => {
+    // We map over 'intensities' to create a noise function for each layer
+    // (Assuming intensities and resolutions have the same length)
+    biome.noiseLayers = biome.terrain.intensities.map((_, index) => {
+      const layerRng = new Alea(`${noiseSeed}_${biome.id}_${index}`);
+      return createNoise2D(layerRng);
+    });
+  });
+
+  // 3. Cave noise
   const caveNoiseFuncs = CAVE_INTENSITIES.map(_ => createNoise3D(new Alea(rng())));
-
-  // Set the combined function
-  terrainHeightNoise = (x, y) =>
-    terrainNoiseFuncs
-      .map((noise, i) => {
-        const intensity = TERRAIN_INTENSITIES[i];
-        const resolution = TERRAIN_RESOLUTIONS[i];
-        return noise(x * resolution, y * resolution) * intensity;
-      })
-      .reduce((total, n) => total + n, 0);
-
   caveNoise = (x, y, z) =>
     caveNoiseFuncs
-      .map((noise, i) => {
-        const intensity = CAVE_INTENSITIES[i];
-        const resolution = CAVE_RESOLUTIONS[i];
-        return noise(x * resolution, y * resolution, z * resolution) * intensity;
-      })
+      .map(
+        (noise, i) =>
+          noise(x * CAVE_RESOLUTIONS[i], y * CAVE_RESOLUTIONS[i], z * CAVE_RESOLUTIONS[i]) *
+          CAVE_INTENSITIES[i]
+      )
       .reduce((total, n) => total + n, 0);
 }
 
@@ -885,6 +874,7 @@ function getBlockChunk(x, z) {
 /** Determines if there is a block at the specified location */
 function isBlockAt(x, y, z) {
   const chunk = getBlockChunk(x, z);
+  if (!chunk) return false;
   return !!chunk.blocks[key(x, y, z)];
 }
 
@@ -906,6 +896,7 @@ function isBlockInChunk(x, z, cx, cz) {
 function findTopBlockY(x, z) {
   const [lx, lz] = localCoords(x, z);
   const chunk = getBlockChunk(x, z);
+  if (!chunk) return null;
   for (let y = MAX_HEIGHT; y >= MIN_HEIGHT; y--) {
     if (isBlockAtLocal(lx, y, lz, chunk)) return y;
   }
@@ -915,7 +906,14 @@ function findTopBlockY(x, z) {
 /** Create a new world */
 function createWorld() {
   initWorld();
-  position = new THREE.Vector3(0, TERRAIN_HEIGHT + 1, 0);
+
+  // Calculate spawn height safely
+  let spawnY = getTerrainHeight(0, 0) + 2;
+  // Ensure we don't spawn in a cave
+  if (spawnY < 5) spawnY = 80;
+
+  position = new THREE.Vector3(0, spawnY, 0);
+
   controls.getObject().rotation.set(0, 0, 0);
   updateChunksAroundPlayer(false);
   controls.lock();
@@ -1039,13 +1037,75 @@ function removeBlockLocal(x, y, z, chunk, generated = true) {
   chunk.updateMesh = true;
 }
 
-/** Get the terrain height (y of block above top) at the xz coordinates */
+// ============================================
+// NEW: BIOME AND TERRAIN LOGIC (ARRAYS)
+// ============================================
+
+/** Calculates a weighted average height based on biome blending with ARRAY OCTAVES */
 function getTerrainHeight(x, z) {
-  const noise = terrainHeightNoise(x, z);
-  return Math.floor(TERRAIN_HEIGHT + noise);
+  // 1. Get the temperature/biome value at this location (-1 to 1)
+  const temp = biomeNoise(x, z);
+
+  // 2. Initialize variables for blending
+  let totalHeight = 0;
+  let totalWeight = 0;
+
+  // 3. Loop through all biomes and calculate their influence
+  for (const biome of BIOME_LIST) {
+    const dist = Math.abs(temp - biome.temperature);
+    let weight = Math.max(0, 1 - dist / WORLD_SETTINGS.blendDistance);
+
+    if (weight > 0) {
+      // --- ARRAY OCTAVE SUMMATION START ---
+      let biomeHeight = biome.terrain.baseHeight;
+      // Loop through intensities
+      for (let i = 0; i < biome.terrain.intensities.length; i++) {
+        const intensity = biome.terrain.intensities[i];
+        const resolution = biome.terrain.resolutions[i]; // Matching resolution
+        const noiseFunc = biome.noiseLayers[i]; // The specific function for this octave
+
+        // noiseFunc returns -1 to 1
+        const rawNoise = noiseFunc(x * resolution, z * resolution);
+        biomeHeight += rawNoise * intensity;
+      }
+      // --- OCTAVE SUMMATION END ---
+
+      totalHeight += biomeHeight * weight;
+      totalWeight += weight;
+    }
+  }
+
+  // 4. Fallback if no weights
+  if (totalWeight === 0) {
+    const b = BIOME_LIST[0];
+    let h = b.terrain.baseHeight;
+    for (let i = 0; i < b.terrain.intensities.length; i++) {
+      const intensity = b.terrain.intensities[i];
+      const resolution = b.terrain.resolutions[i];
+      h += b.noiseLayers[i](x * resolution, z * resolution) * intensity;
+    }
+    return Math.floor(h);
+  }
+
+  return Math.floor(totalHeight / totalWeight);
 }
 
-/** Check if a block should be air as part of a cave */
+/** Determines the dominant biome at a location (for block types/trees) */
+function getBiomeAt(x, z) {
+  const temp = biomeNoise(x, z);
+  let bestBiome = BIOME_LIST[0];
+  let minDist = Infinity;
+
+  for (const biome of BIOME_LIST) {
+    const dist = Math.abs(temp - biome.temperature);
+    if (dist < minDist) {
+      minDist = dist;
+      bestBiome = biome;
+    }
+  }
+  return bestBiome;
+}
+
 function isCave(x, y, z) {
   // Compute threshold to interpolate between CAVE_MIN_THRESHOLD in the middle
   // and 1 at CAVE_MIN_HEIGHT and CAVE_MAX_HEIGHT
@@ -1056,31 +1116,34 @@ function isCave(x, y, z) {
 }
 
 /** Generate a tree with root at the specified location */
-function generateTree(x, y, z, cx, cz, rng) {
+function generateTree(x, y, z, cx, cz, rng, treeConfig) {
   // Randomly generate trunk height
-  const minTrunkHeight = 6;
-  const maxTrunkHeight = 8;
+  const minTrunkHeight = treeConfig.trunkHeightMin;
+  const maxTrunkHeight = treeConfig.trunkHeightMax;
   const trunkHeight = minTrunkHeight + Math.floor(rng() * (maxTrunkHeight - minTrunkHeight + 1));
+
+  const woodID = BLOCK_ID[treeConfig.wood] || BLOCK_ID.wood;
+  const leavesID = BLOCK_ID[treeConfig.leaves] || BLOCK_ID.leaves;
 
   // Build the trunk
   for (let i = 0; i < trunkHeight; i++) {
-    placeBlockInChunk(BLOCK_ID.wood, x, y + i, z, cx, cz);
+    placeBlockInChunk(woodID, x, y + i, z, cx, cz);
   }
 
   // Determine canopy position
   const canopyCenterY = y + trunkHeight - 2;
-  const squareCanopyRadius = TREE_CANOPY_RADIUS * TREE_CANOPY_RADIUS;
+  const radius = treeConfig.canopyRadius;
+  const squareCanopyRadius = radius * radius;
 
-  // Build a sphere of leaves around the top of the trunk
-  for (let ly = -TREE_CANOPY_RADIUS; ly <= TREE_CANOPY_RADIUS; ly++) {
-    for (let lx = -TREE_CANOPY_RADIUS; lx <= TREE_CANOPY_RADIUS; lx++) {
-      for (let lz = -TREE_CANOPY_RADIUS; lz <= TREE_CANOPY_RADIUS; lz++) {
+  for (let ly = -radius; ly <= radius; ly++) {
+    for (let lx = -radius; lx <= radius; lx++) {
+      for (let lz = -radius; lz <= radius; lz++) {
         const squareDist = lx * lx + ly * ly + lz * lz;
-
-        // Create a slightly irregular sphere shape by adding randomness
-        const generateChance = 1 - (squareDist / squareCanopyRadius) * TREE_FOLIAGE_FALLOFF;
-        if (squareDist < squareCanopyRadius && rng() < generateChance) {
-          placeBlockInChunk(BLOCK_ID.leaves, x + lx, canopyCenterY + ly, z + lz, cx, cz);
+        // Simple sphere check
+        if (squareDist < squareCanopyRadius) {
+          // Don't replace wood with leaves
+          if (lx === 0 && lz === 0 && ly < 0) continue;
+          placeBlockInChunk(leavesID, x + lx, canopyCenterY + ly, z + lz, cx, cz);
         }
       }
     }
@@ -1109,27 +1172,38 @@ function generateChunk(cx, cz) {
   const startX = cx * CHUNK_SIZE;
   const startZ = cz * CHUNK_SIZE;
 
-  // Generate terrain
+  // 1. Terrain Pass
   for (let x = 0; x < CHUNK_SIZE; x++) {
     for (let z = 0; z < CHUNK_SIZE; z++) {
       // Calculate coordinates & height
       const wx = startX + x;
       const wz = startZ + z;
+
       const height = getTerrainHeight(wx, wz);
+      const biome = getBiomeAt(wx, wz);
 
       // Place blocks
       for (let y = 0; y < height; y++) {
         // Check for a cave - if it is a cave, skip placing the block
         if (isCave(wx, y, wz)) continue;
 
-        const top = y === height - 1;
-        const type = top ? BLOCK_ID.grass : y >= height - 3 ? BLOCK_ID.dirt : BLOCK_ID.stone;
-        placeBlockLocal(type, x, y, z, chunk);
+        let typeID;
+        if (y === height - 1) {
+          typeID = BLOCK_ID[biome.blocks.surface];
+        } else if (y >= height - 4) {
+          typeID = BLOCK_ID[biome.blocks.subsurface];
+        } else {
+          typeID = BLOCK_ID[biome.blocks.deep];
+        }
+
+        if (typeID === undefined) typeID = BLOCK_ID.stone;
+
+        placeBlockLocal(typeID, x, y, z, chunk);
       }
     }
   }
 
-  // Generate trees
+  // 2. Tree Pass
   for (let x = -TREE_CANOPY_RADIUS; x < CHUNK_SIZE + TREE_CANOPY_RADIUS; x++) {
     for (let z = -TREE_CANOPY_RADIUS; z < CHUNK_SIZE + TREE_CANOPY_RADIUS; z++) {
       // Get location rng
@@ -1137,13 +1211,15 @@ function generateChunk(cx, cz) {
       const wz = startZ + z;
       const lrng = locationRng(wx, wz);
 
+      const biome = getBiomeAt(wx, wz);
+
       // Place tree
-      if (lrng() < TREE_CHANCE_PER_BLOCK) {
+      if (lrng() < biome.trees.chance) {
         const height = getTerrainHeight(wx, wz);
 
         // Only generate tree if the ground block exists (is not a cave)
         if (!isCave(wx, height - 1, wz)) {
-          generateTree(wx, height, wz, cx, cz, lrng);
+          generateTree(wx, height, wz, cx, cz, lrng, biome.trees);
         }
       }
     }
@@ -1635,16 +1711,19 @@ function updateHotbar() {
 /** Update the debug text */
 function updateDebug() {
   const debug = document.getElementById("debug");
+  let biome = "Unknown";
+  // Safe check if position exists
+  if (position && biomeNoise) {
+    const b = getBiomeAt(position.x, position.z);
+    if (b) biome = b.name;
+  }
 
   debug.textContent = `
-    FPS:
-      ${Math.round(fps)}
+    FPS: ${Math.round(fps)}
     |
-    Position (x y z):
-      ${position.x.toFixed(2)} ${position.y.toFixed(2)} ${position.z.toFixed(2)}
+    Pos: ${position.x.toFixed(0)} ${position.y.toFixed(0)} ${position.z.toFixed(0)}
     |
-    Rotation (x y):
-      ${THREE.Math.radToDeg(rotation.x).toFixed(2)} ${THREE.Math.radToDeg(rotation.y).toFixed(2)}
+    Biome: ${biome}
   `;
 }
 
