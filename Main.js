@@ -614,7 +614,13 @@ function onKeyUp(event) {
 /** Callback for mouse click */
 function onMouseDown(event) {
   // Only break blocks when playing
-  if (!controls.isLocked) return;
+  if (!playing) return;
+
+  // Allow clicking into pointer lock if pause menu is not shown
+  if (!controls.isLocked) {
+    if (pauseMenu.style.display === "none") controls.lock();
+    return;
+  }
 
   // All breakable block hitboxes
   const blockHitboxes = createBlockRangeHitboxes(
@@ -686,6 +692,8 @@ function onCreate() {
 
   // Check if overwrite
   if (localStorage.getItem(SAVE_PREFIX + nameVal)) {
+    alert(`A world with the name ${nameVal} already exists.`);
+    return;
     if (!confirm(`A world with the name ${nameVal} already exists. Overwrite?`)) return;
   }
 
@@ -736,6 +744,23 @@ function onOpenLoadMenu() {
         loadWorld(saveCode);
       });
 
+      // Rename Button
+      const renameBtn = document.createElement("button");
+      renameBtn.textContent = "Rename";
+      renameBtn.onclick = withErrorHandling(() => {
+        const newName = prompt(`Rename ${worldName} to:`);
+        if (!newName) return;
+        if (localStorage.getItem(SAVE_PREFIX + newName)) {
+          alert(`A world with the name ${newName} already exists.`);
+          return;
+        }
+
+        const save = localStorage.getItem(key);
+        localStorage.removeItem(key);
+        localStorage.setItem(SAVE_PREFIX + newName, save);
+        onOpenLoadMenu(); // refresh list
+      });
+
       // Delete Button
       const delBtn = document.createElement("button");
       delBtn.textContent = "Delete";
@@ -747,6 +772,7 @@ function onOpenLoadMenu() {
       });
 
       btnGroup.appendChild(loadBtn);
+      btnGroup.appendChild(renameBtn);
       btnGroup.appendChild(delBtn);
       row.appendChild(nameLabel);
       row.appendChild(btnGroup);
@@ -1358,6 +1384,7 @@ function generateSaveCode() {
   const save = {
     saveVersion: 1,
     seed,
+    name: currentWorldName,
     player: { position: pos, velocity: vel, rotation: rot, canJump },
     chunks: chunksEncoded,
   };
@@ -1383,6 +1410,18 @@ function loadSaveCode(save) {
 function loadSaveCode1(save) {
   // Decode and update misc data
   seed = save.seed;
+  currentWorldName = save.name;
+  if (!currentWorldName) {
+    while (true) {
+      if (currentWorldName) {
+        currentWorldName = prompt(`A world with the name ${currentWorldName} already exists. Enter a different name:`);
+      } else {
+        currentWorldName = prompt("Enter a name for this world:");
+      }
+      
+      if (currentWorldName && !localStorage.getItem(SAVE_PREFIX + currentWorldName)) break;
+    }
+  }
   initRandom();
   position = new THREE.Vector3(...save.player.position);
   velocity = new THREE.Vector3(...save.player.velocity);
@@ -1410,6 +1449,18 @@ function loadSaveCode1(save) {
 function loadSaveCode0(save) {
   // Decode and update misc data
   seed = "0";
+  currentWorldName = save.name;
+  if (!currentWorldName) {
+    while (true) {
+      if (currentWorldName) {
+        currentWorldName = prompt(`A world with the name ${currentWorldName} already exists. Enter a different name:`);
+      } else {
+        currentWorldName = prompt("Enter a name for this world:");
+      }
+      
+      if (currentWorldName && !localStorage.getItem(SAVE_PREFIX + currentWorldName)) break;
+    }
+  }
   initRandom();
   position = new THREE.Vector3(...save.player.position);
   velocity = new THREE.Vector3(...save.player.velocity);
