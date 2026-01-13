@@ -21,7 +21,7 @@ const CAVE_RESOLUTIONS = [0.01, 0.05, 0.2];
 const MIN_HEIGHT = 0;
 const MAX_HEIGHT = 250;
 const CHUNK_SIZE = 16;
-const TREE_CANOPY_RADIUS = 3;
+const MAX_TREE_CANOPY_RADIUS = 4;
 
 const PLAYER_SPEED = 4;
 const PLAYER_SPRINT_SPEED = 7;
@@ -1052,34 +1052,35 @@ function getTerrainHeight(x, z) {
   // 1. Get the temperature/biome value at this location (-1 to 1)
   const temp = biomeNoise(x, z);
 
-  // 2. Initialize variables for blending
-  let totalHeight = 0;
-  let totalWeight = 0;
+  // 2. Blend between two neighboring biomes
+  let biome1;
+  let biome2;
 
-  // 3. Loop through all biomes and calculate their influence
   for (const biome of BIOME_LIST) {
-    const dist = Math.abs(temp - biome.temperature);
-
-    // Triangle weight blending shape ___/\___
-    let weight = Math.max(0, 1 - dist / WORLD_SETTINGS.blendDistance);
-
-    if (weight > 0) {
-      // Get the biome's terrain height contribution
-      let biomeHeight = biome.terrainHeightAt(x, z);
-
-      totalHeight += biomeHeight * weight;
-      totalWeight += weight;
+    if (biome.temperature === temp) {
+      // There's no way right?
+      return Math.floor(biome.terrainHeightAt(x, z));
+    } else if (biome.temperature < temp) {
+      if (!biome1 || biome1.temperature < biome.temperature) biome1 = biome;
+    } else {
+      if (!biome2 || biome2.temperature > biome.temperature) biome2 = biome;
     }
   }
 
-  // 4. Fallback if no weights
-  if (totalWeight === 0) {
-    const b = BIOME_LIST[0];
-    let h = b.terrainHeightAt(x, z);
-    return Math.floor(h);
-  }
+  // 3. Blend between the two biomes
+  if (!biome1) return Math.floor(biome2.terrainHeightAt(x, z));
+  if (!biome2) return Math.floor(biome1.terrainHeightAt(x, z));
 
-  return Math.floor(totalHeight / totalWeight);
+  if (!(biome1.temperature < temp && temp < biome2.temperature)) alert("OH NO SOMETHING BROKE");
+
+  const height1 = biome1.terrainHeightAt(x, z);
+  const height2 = biome2.terrainHeightAt(x, z);
+  let t = (temp - biome1.temperature) / (biome2.temperature - biome1.temperature);
+  // Ease in-out blending shape
+  t = t < 0.5 ? 4 * t ** 3 : 4 * (t - 1) ** 3 + 1;
+  const height = height1 * (1 - t) + height2 * t;
+
+  return Math.floor(height);
 }
 
 /** Determines the dominant biome at a location (for block types/trees) */
@@ -1196,8 +1197,8 @@ function generateChunk(cx, cz) {
   }
 
   // 2. Tree Pass
-  for (let x = -TREE_CANOPY_RADIUS; x < CHUNK_SIZE + TREE_CANOPY_RADIUS; x++) {
-    for (let z = -TREE_CANOPY_RADIUS; z < CHUNK_SIZE + TREE_CANOPY_RADIUS; z++) {
+  for (let x = -MAX_TREE_CANOPY_RADIUS; x < CHUNK_SIZE + MAX_TREE_CANOPY_RADIUS; x++) {
+    for (let z = -MAX_TREE_CANOPY_RADIUS; z < CHUNK_SIZE + MAX_TREE_CANOPY_RADIUS; z++) {
       // Get location rng
       const wx = startX + x;
       const wz = startZ + z;
@@ -1703,19 +1704,20 @@ function updateHotbar() {
 /** Update the debug text */
 function updateDebug() {
   const debug = document.getElementById("debug");
-  let biome = "Unknown";
-  // Safe check if position exists
-  if (position && biomeNoise) {
-    const b = getBiomeAt(position.x, position.z);
-    if (b) biome = b.name;
-  }
+  const x = Math.floor(position.x);
+  const z = Math.floor(position.z);
+  const b = getBiomeAt(x, z);
+  biome = b.name;
+  const temp = biomeNoise(x, z);
 
   debug.textContent = `
     FPS: ${Math.round(fps)}
     |
-    Pos: ${position.x.toFixed(0)} ${position.y.toFixed(0)} ${position.z.toFixed(0)}
+    Pos: ${position.x.toFixed(2)} ${position.y.toFixed(2)} ${position.z.toFixed(2)}
     |
     Biome: ${biome}
+    |
+    Temperature: ${temp.toFixed(2)}
   `;
 }
 

@@ -11,7 +11,7 @@ const BIOME_LIST = [
   {
     id: "hills",
     name: "Grassy Hills",
-    temperature: -0.2,
+    temperature: 0,
 
     // BLOCKS
     blocks: {
@@ -40,7 +40,7 @@ const BIOME_LIST = [
   {
     id: "mountains",
     name: "Extreme Mountains",
-    temperature: 0.5,
+    temperature: -0.5,
 
     // BLOCKS
     blocks: {
@@ -62,6 +62,32 @@ const BIOME_LIST = [
       canopyRadius: 3,
       trunkHeightMin: 6,
       trunkHeightMax: 8,
+      wood: "wood",
+      leaves: "leaves",
+    },
+  },
+  {
+    id: "plains",
+    name: "Grassy Plains",
+    temperature: 0.5,
+
+    blocks: {
+      surface: "grass",
+      subsurface: "dirt",
+      deep: "stone",
+    },
+
+    terrain: {
+      baseHeight: 65,
+      intensities: [8, 3, 1],
+      resolutions: [0.003, 0.01, 0.04],
+    },
+
+    trees: {
+      chance: 0.0001,
+      canopyRadius: 4,
+      trunkHeightMin: 8,
+      trunkHeightMax: 12,
       wood: "wood",
       leaves: "leaves",
     },
