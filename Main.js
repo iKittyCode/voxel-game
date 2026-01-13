@@ -857,6 +857,9 @@ function onCloseImport() {
 
 /** Callback for clicking quit button */
 function onQuitWorld() {
+  // Save before quitting
+  onSave();
+
   destroyWorld();
   pauseMenu.style.display = "none";
   mainMenu.style.display = "flex";
