@@ -1071,8 +1071,6 @@ function getTerrainHeight(x, z) {
   if (!biome1) return Math.floor(biome2.terrainHeightAt(x, z));
   if (!biome2) return Math.floor(biome1.terrainHeightAt(x, z));
 
-  if (!(biome1.temperature < temp && temp < biome2.temperature)) alert("OH NO SOMETHING BROKE");
-
   const height1 = biome1.terrainHeightAt(x, z);
   const height2 = biome2.terrainHeightAt(x, z);
   let t = (temp - biome1.temperature) / (biome2.temperature - biome1.temperature);

@@ -4,7 +4,6 @@
 
 const WORLD_SETTINGS = {
   biomeScale: 1500, // Larger number = Bigger Biomes
-  blendDistance: 0.5, // How smooth the transition is (0.0 to 0.5)
 };
 
 const BIOME_LIST = [
