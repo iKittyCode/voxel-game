@@ -691,10 +691,10 @@ function onCreate() {
   if (!nameVal) nameVal = "New World";
 
   // Check if overwrite
-  if (localStorage.getItem(SAVE_PREFIX + nameVal)) {
+  const keys = JSON.parse(localStorage.getItem("voxel_saves"));
+  if (keys && keys.includes(SAVE_PREFIX + nameVal)) {
     alert(`A world with the name ${nameVal} already exists.`);
     return;
-    if (!confirm(`A world with the name ${nameVal} already exists. Overwrite?`)) return;
   }
 
   currentWorldName = nameVal;
@@ -711,6 +711,12 @@ function onCreate() {
 function onSave() {
   const save = generateSaveCode();
   localStorage.setItem(SAVE_PREFIX + currentWorldName, save);
+
+  const keys = JSON.parse(localStorage.getItem("voxel_saves")) || [];
+  if (!keys.includes(SAVE_PREFIX + currentWorldName)) {
+    keys.unshift(SAVE_PREFIX + currentWorldName);
+    localStorage.setItem("voxel_saves", JSON.stringify(keys));
+  }
 }
 
 /** Open the new load menu and populate list */
@@ -719,71 +725,99 @@ function onOpenLoadMenu() {
   loadMenu.style.display = "flex";
   loadMenuList.innerHTML = "";
 
-  let foundSaves = false;
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key.startsWith(SAVE_PREFIX)) {
-      foundSaves = true;
-
-      const worldName = key.replace(SAVE_PREFIX, "");
-
-      const row = document.createElement("div");
-      const nameLabel = document.createElement("span");
-      const btnGroup = document.createElement("div");
-
-      row.classList.add("load-menu-row");
-      nameLabel.textContent = worldName;
-
-      // Load Button
-      const loadBtn = document.createElement("button");
-      loadBtn.textContent = "Play";
-      loadBtn.onclick = withErrorHandling(() => {
-        currentWorldName = worldName;
-        const saveCode = localStorage.getItem(key);
-        loadMenu.style.display = "none";
-        loadWorld(saveCode);
-      });
-
-      // Rename Button
-      const renameBtn = document.createElement("button");
-      renameBtn.textContent = "Rename";
-      renameBtn.onclick = withErrorHandling(() => {
-        const newName = prompt(`Rename ${worldName} to:`);
-        if (!newName) return;
-        if (localStorage.getItem(SAVE_PREFIX + newName)) {
-          alert(`A world with the name ${newName} already exists.`);
-          return;
-        }
-
-        const save = localStorage.getItem(key);
-        localStorage.removeItem(key);
-        localStorage.setItem(SAVE_PREFIX + newName, save);
-        onOpenLoadMenu(); // refresh list
-      });
-
-      // Delete Button
-      const delBtn = document.createElement("button");
-      delBtn.textContent = "Delete";
-      delBtn.onclick = withErrorHandling(() => {
-        if (confirm(`Are you sure you want to delete "${worldName}"?`)) {
-          localStorage.removeItem(key);
-          onOpenLoadMenu(); // refresh list
-        }
-      });
-
-      btnGroup.appendChild(loadBtn);
-      btnGroup.appendChild(renameBtn);
-      btnGroup.appendChild(delBtn);
-      row.appendChild(nameLabel);
-      row.appendChild(btnGroup);
-      loadMenuList.appendChild(row);
-    }
-  }
-
-  if (!foundSaves) {
+  // Get save key order
+  const keys = JSON.parse(localStorage.getItem("voxel_saves"));
+  if (!keys || !keys.length) {
     const msg = document.createElement("p");
     msg.textContent = "No saved worlds found.";
     loadMenuList.appendChild(msg);
+    return;
+  }
+
+  // Display each one
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    const worldName = key.replace(SAVE_PREFIX, "");
+
+    const row = document.createElement("div");
+    const nameLabel = document.createElement("span");
+    const btnGroup = document.createElement("div");
+    const btnsLeft = document.createElement("div");
+    const btnsRight = document.createElement("div");
+
+    row.classList.add("load-menu-row");
+    btnGroup.classList.add("load-menu-buttons");
+    nameLabel.textContent = worldName;
+
+    // Load Button
+    const loadBtn = document.createElement("button");
+    loadBtn.textContent = "Play";
+    loadBtn.onclick = withErrorHandling(() => {
+      currentWorldName = worldName;
+      const saveCode = localStorage.getItem(key);
+      loadMenu.style.display = "none";
+      loadWorld(saveCode);
+    });
+
+    // Rename Button
+    const renameBtn = document.createElement("button");
+    renameBtn.textContent = "Rename";
+    renameBtn.onclick = withErrorHandling(() => {
+      const newName = prompt(`Rename ${worldName} to:`);
+      if (!newName) return;
+      if (localStorage.getItem(SAVE_PREFIX + newName)) {
+        alert(`A world with the name ${newName} already exists.`);
+        return;
+      }
+
+      const save = localStorage.getItem(key);
+      localStorage.removeItem(key);
+      localStorage.setItem(SAVE_PREFIX + newName, save);
+      onOpenLoadMenu(); // refresh list
+    });
+
+    // Delete Button
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "Delete";
+    delBtn.onclick = withErrorHandling(() => {
+      if (confirm(`Are you sure you want to delete "${worldName}"?`)) {
+        localStorage.removeItem(key);
+        keys.splice(keys.indexOf(key), 1);
+        localStorage.setItem("voxel_saves", JSON.stringify(keys));
+        onOpenLoadMenu(); // refresh list
+      }
+    });
+
+    // Move Buttons
+    const upBtn = document.createElement("img");
+    upBtn.src = up_button_png;
+    upBtn.onclick = withErrorHandling(() => {
+      if (i !== 0) {
+        [keys[i], keys[i - 1]] = [keys[i - 1], keys[i]];
+        localStorage.setItem("voxel_saves", JSON.stringify(keys));
+        onOpenLoadMenu(); // refresh list
+      }
+    });
+    const downBtn = document.createElement("img");
+    downBtn.src = down_button_png;
+    downBtn.onclick = withErrorHandling(() => {
+      if (i !== keys.length - 1) {
+        [keys[i], keys[i + 1]] = [keys[i + 1], keys[i]];
+        localStorage.setItem("voxel_saves", JSON.stringify(keys));
+        onOpenLoadMenu(); // refresh list
+      }
+    });
+
+    btnsLeft.appendChild(loadBtn);
+    btnsLeft.appendChild(renameBtn);
+    btnsLeft.appendChild(delBtn);
+    btnsRight.appendChild(upBtn);
+    btnsRight.appendChild(downBtn);
+    btnGroup.appendChild(btnsLeft);
+    btnGroup.appendChild(btnsRight);
+    row.appendChild(nameLabel);
+    row.appendChild(btnGroup);
+    loadMenuList.appendChild(row);
   }
 }
 
@@ -1415,14 +1449,17 @@ function loadSaveCode1(save) {
   seed = save.seed;
   currentWorldName = save.name;
   if (!currentWorldName) {
+    const keys = JSON.parse(localStorage.getItem("voxel_saves"));
     while (true) {
       if (currentWorldName) {
-        currentWorldName = prompt(`A world with the name ${currentWorldName} already exists. Enter a different name:`);
+        currentWorldName = prompt(
+          `A world with the name ${currentWorldName} already exists. Enter a different name:`
+        );
       } else {
         currentWorldName = prompt("Enter a name for this world:");
       }
-      
-      if (currentWorldName && !localStorage.getItem(SAVE_PREFIX + currentWorldName)) break;
+
+      if (currentWorldName && !(keys && keys.includes(SAVE_PREFIX + currentWorldName))) break;
     }
   }
   initRandom();
@@ -1454,14 +1491,17 @@ function loadSaveCode0(save) {
   seed = "0";
   currentWorldName = save.name;
   if (!currentWorldName) {
+    const keys = JSON.parse(localStorage.getItem("voxel_saves"));
     while (true) {
       if (currentWorldName) {
-        currentWorldName = prompt(`A world with the name ${currentWorldName} already exists. Enter a different name:`);
+        currentWorldName = prompt(
+          `A world with the name ${currentWorldName} already exists. Enter a different name:`
+        );
       } else {
         currentWorldName = prompt("Enter a name for this world:");
       }
-      
-      if (currentWorldName && !localStorage.getItem(SAVE_PREFIX + currentWorldName)) break;
+
+      if (currentWorldName && !(keys && keys.includes(SAVE_PREFIX + currentWorldName))) break;
     }
   }
   initRandom();

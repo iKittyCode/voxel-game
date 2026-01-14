@@ -88,6 +88,22 @@ body {
   font-size: 20pt;
 }
 
+.load-menu-buttons {
+  display: flex;
+  align-items: center;
+}
+
+.load-menu-buttons img {
+  display: block;
+  width: 36px;
+  height: 24px;
+  margin: 30px 10px;
+}
+
+.load-menu-buttons img:hover {
+  filter: brightness(0.7);
+}
+
 #game {
   position: relative;
 }
