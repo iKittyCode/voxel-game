@@ -4,13 +4,21 @@
 
 // Constants:
 const BLOCK_TYPES = [
-  { name: "grass", color: 0x7cfc00, texPaths: [grass_png, dirt_png, grass_side_png, 2, 2, 2] },
-  { name: "dirt", color: 0x8b5a2b, texPaths: [dirt_png, 0, 0, 0, 0, 0] },
-  { name: "stone", color: 0x888888, texPaths: [stone_png, 0, 0, 0, 0, 0] },
-  { name: "wood", color: 0x8b4513, texPaths: [log_top_png, 0, log_side_png, 2, 2, 2] },
-  { name: "leaves", color: 0x2b843f, texPaths: [leaves_png, 0, 0, 0, 0, 0] },
+  { name: "grass", texPaths: [grass_png, dirt_png, grass_side_png, 2, 2, 2] },
+  { name: "dirt", texPaths: [dirt_png, 0, 0, 0, 0, 0] },
+  { name: "stone", texPaths: [stone_png, 0, 0, 0, 0, 0] },
+  { name: "wood", texPaths: [log_top_png, 0, log_side_png, 2, 2, 2] },
+  { name: "leaves", texPaths: [leaves_png, 0, 0, 0, 0, 0] },
+];
+const ITEM_TYPES = [
+  { name: "grass", texture: grass_side_png, blockName: "grass" },
+  { name: "dirt", texture: dirt_png, blockName: "dirt" },
+  { name: "stone", texture: stone_png, blockName: "stone" },
+  { name: "wood", texture: log_side_png, blockName: "wood" },
+  { name: "leaves", texture: leaves_png, blockName: "leaves" },
 ];
 const BLOCK_ID = {}; // { name: id }
+const ITEM_ID = {}; // { name: id }
 
 const CUBE_SIZE = 1;
 const CAVE_MIN_THRESHOLD = 0.5; // Controls how many caves appear
@@ -87,10 +95,13 @@ let camOffset = CAM_OFFSET.clone();
 let sprintTapLastTime = 0;
 let isDoubleTapSprinting = false;
 
+const inventory = new Array(30);
+
 // UI
 let isUIVisible = true;
 let isPaused = false;
 let isInventoryOpen = false;
+const inventorySlots = new Array(30);
 const debugElem = document.getElementById("debug");
 const hotbar = document.getElementById("hotbar");
 const crosshair = document.getElementById("crosshair");
@@ -219,8 +230,8 @@ function init() {
   setupUI();
 
   // Generate stuff
-  generateBlockIDs();
-  generateBlockMaterials();
+  generateBlockData();
+  generateItemData();
 
   // Event listeners
   window.addEventListener("resize", withErrorHandling(onWindowResize));
@@ -235,21 +246,14 @@ function init() {
   animate();
 }
 
-/** Populate the `BLOCK_ID` object with the ids of blocks from their names */
-function generateBlockIDs() {
+/** Generate all block data */
+function generateBlockData() {
+  // Block name to id mapping
   BLOCK_TYPES.forEach((type, i) => {
     BLOCK_ID[type.name] = i;
   });
-}
 
-/** Initialize all random functions from the global seed */
-function initRandom() {
-  const rng = new Alea(seed);
-  generateNoiseFunctions(rng());
-}
-
-/** Generate materials for each block type */
-function generateBlockMaterials() {
+  // Block type materials
   for (const blockType of Object.values(BLOCK_TYPES)) {
     blockType.materials = [];
 
@@ -273,6 +277,25 @@ function generateBlockMaterials() {
       blockType.materials.push(material);
     }
   }
+}
+
+/** Generate all item data */
+function generateItemData() {
+  // Item name to id mapping
+  ITEM_TYPES.forEach((type, i) => {
+    ITEM_ID[type.name] = i;
+  });
+
+  // Item type block ids
+  ITEM_TYPES.forEach(type => {
+    type.blockID = BLOCK_ID[type.blockName];
+  });
+}
+
+/** Initialize all random functions from the global seed */
+function initRandom() {
+  const rng = new Alea(seed);
+  generateNoiseFunctions(rng());
 }
 
 /** Generate the noise functions */
@@ -906,6 +929,7 @@ function onToggleInventory() {
   if (isInventoryOpen) {
     inventoryMenu.style.display = "flex";
     controls.unlock();
+    updateInventory();
   } else {
     inventoryMenu.style.display = "none";
     controls.lock();
@@ -1015,6 +1039,7 @@ function createWorld() {
   initWorld();
   position = new THREE.Vector3(0, TERRAIN_HEIGHT + 1, 0);
   controls.getObject().rotation.set(0, 0, 0);
+  setDefaultInventory();
   updateChunksAroundPlayer(false);
   controls.lock();
 }
@@ -1043,6 +1068,13 @@ function destroyWorld() {
     delete chunks[ck];
   }
   playing = false;
+}
+
+/** Set a default inventory */
+function setDefaultInventory() {
+  for (let i = 0; i < ITEM_TYPES.length; i++) {
+    inventory[i] = { id: i };
+  }
 }
 
 /** Create a hitbox for a block */
@@ -1700,25 +1732,27 @@ function setupInventoryMenu() {
 
   const inventoryElem = document.getElementById("inventory");
 
+  // Create non-hotbar inventory slots
   for (let i = 6; i < 30; i++) {
     const slot = document.createElement("div");
     slot.classList.add("inventory-slot");
     slot.dataset.slotid = i;
     const img = document.createElement("img");
-    img.src = test_png;
     slot.appendChild(img);
     inventoryElem.appendChild(slot);
+    inventorySlots[i] = slot;
   }
 
+  // Create hotbar inventory slots
   for (let i = 0; i < 6; i++) {
     const slot = document.createElement("div");
     slot.classList.add("inventory-slot");
     slot.classList.add("inventory-slot-hotbar");
     slot.dataset.slotid = i;
     const img = document.createElement("img");
-    img.src = test_png;
     slot.appendChild(img);
     inventoryElem.appendChild(slot);
+    inventorySlots[i] = slot;
   }
 }
 
@@ -1792,6 +1826,22 @@ function setupImportMenu() {
 function updateHotbar() {
   const selectImgs = [hotbar0_png, hotbar1_png, hotbar2_png, hotbar3_png, hotbar4_png, hotbar5_png];
   hotbar.style.backgroundImage = `url("${selectImgs[selectedBlock]}")`;
+}
+
+/** Update the inventory UI */
+function updateInventory() {
+  // Set img srcs for each slot
+  for (let i = 0; i < 30; i++) {
+    const slot = inventorySlots[i];
+    const img = slot.children[0];
+    const slotData = inventory[i];
+    if (slotData) {
+      const itemType = ITEM_TYPES[slotData.id];
+      img.src = itemType.texture;
+    } else {
+      img.src = blank_png;
+    }
+  }
 }
 
 /** Update the debug text */
