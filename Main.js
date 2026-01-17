@@ -979,9 +979,6 @@ function onInventorySlotClicked(index) {
     }
   }
 
-  // Update hotbar if needed
-  if (index < 6) updateHotbar();
-
   updateInventory();
 }
 
@@ -1089,6 +1086,7 @@ function createWorld() {
   position = new THREE.Vector3(0, TERRAIN_HEIGHT + 1, 0);
   controls.getObject().rotation.set(0, 0, 0);
   setDefaultInventory();
+  updateInventory();
   updateChunksAroundPlayer(false);
   controls.lock();
 }
@@ -1098,6 +1096,7 @@ function loadWorld(saveCode) {
   loadSaveCode(saveCode);
   initWorld();
   setDefaultInventory();
+  updateInventory();
   updateChunksAroundPlayer(false);
   controls.lock();
 }
@@ -1744,11 +1743,6 @@ function setupVars() {
 
 /** Setup the hotbar */
 function setupHotbar() {
-  // Preset all images to blank
-  Array.from(hotbar.children).forEach(img => {
-    img.src = blank_png;
-  });
-
   // Update
   updateHotbar();
 }
@@ -1905,6 +1899,9 @@ function updateInventory() {
   } else {
     mouseImg.src = blank_png;
   }
+
+  // Update hotbar to match inventory
+  updateHotbar();
 }
 
 /** Update the debug text */
