@@ -48,6 +48,7 @@ body {
   width: 200px;
 }
 
+.menu input:not([type]),
 .menu input[type="text"] {
   font-size: 20pt;
   background-color: #ccc;
