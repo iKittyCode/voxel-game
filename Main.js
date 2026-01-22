@@ -111,6 +111,8 @@ const crosshair = document.getElementById("crosshair");
 const mainMenu = document.getElementById("main-menu");
 const pauseMenu = document.getElementById("pause-menu");
 const inventoryMenu = document.getElementById("inventory-menu");
+const inventorySearchInput = document.getElementById("inventory-search-input");
+const inventorySearchResults = document.getElementById("inventory-search-results");
 const mouseItemElem = document.getElementById("mouse-item");
 const settingsMenu = document.getElementById("settings-menu");
 const createMenu = document.getElementById("create-menu");
@@ -984,6 +986,39 @@ function onInventorySlotClicked(index) {
   updateInventory();
 }
 
+/** Callback for input into the inventory search menu */
+function onInventorySearch() {
+  const results = [];
+  const keyword = inventorySearchInput.value;
+
+  // Search block names
+  for (let i = 0; i < ITEM_TYPES.length; i++) {
+    const itemType = ITEM_TYPES[i];
+    if (itemType.name.includes(keyword)) results.push(i);
+  }
+
+  // Clear old results ui
+  while (inventorySearchResults.firstChild) {
+    inventorySearchResults.removeChild(inventorySearchResults.firstChild);
+  }
+
+  // Add new results
+  for (const itemID of results) {
+    const slot = document.createElement("div");
+    slot.classList.add("inventory-slot");
+    const img = document.createElement("img");
+    slot.onmousedown = withErrorHandling((event) => {
+      // Set mouse item to the id
+      mouseItem = { id: itemID };
+      updateInventory();
+      event.stopPropagation();
+    });
+    img.src = ITEM_TYPES[itemID].texture;
+    slot.appendChild(img);
+    inventorySearchResults.appendChild(slot);
+  }
+}
+
 /** Callback for clicking settings button */
 function onOpenSettings() {
   settingsMenu.style.display = "flex";
@@ -1087,7 +1122,7 @@ function createWorld() {
   initWorld();
   position = new THREE.Vector3(0, TERRAIN_HEIGHT + 1, 0);
   controls.getObject().rotation.set(0, 0, 0);
-  setDefaultInventory();
+  inventory = new Array(30);
   updateInventory();
   updateChunksAroundPlayer(false);
   controls.lock();
@@ -1118,17 +1153,6 @@ function destroyWorld() {
     delete chunks[ck];
   }
   playing = false;
-}
-
-/** Set a default inventory */
-function setDefaultInventory() {
-  // Clear
-  inventory = new Array(30);
-
-  // Add one of each item
-  for (let i = 0; i < ITEM_TYPES.length; i++) {
-    inventory[i] = { id: i };
-  }
 }
 
 /** Create a hitbox for a block */
@@ -1606,7 +1630,7 @@ function loadSaveCode1(save) {
     inventory = save.player.inventory.slots;
     mouseItem = save.player.inventory.mouseItem;
   } else {
-    setDefaultInventory();
+    inventory = new Array(30);
   }
 
   // Decode and add new chunks
@@ -1812,6 +1836,13 @@ function setupInventoryMenu() {
   }
 
   inventorySearchElem.style.display = "none";
+  inventorySearchInput.oninput = withErrorHandling(onInventorySearch);
+  onInventorySearch(); // initial results
+  inventorySearchResults.onmousedown = withErrorHandling(() => {
+    // Delete mouse item
+    mouseItem = undefined;
+    updateInventory();
+  });
 
   // Create hotbar slots for the search menu
   for (let i = 0; i < 6; i++) {
@@ -1928,7 +1959,7 @@ function updateInventory() {
   // Set img srcs for each slot
   for (let i = 0; i < 30; i++) {
     const slot = inventorySlots[i];
-    const img = slot.children[0];
+    const img = slot.firstChild;
     const slotData = inventory[i];
     if (slotData) {
       const itemType = ITEM_TYPES[slotData.id];
@@ -1941,7 +1972,7 @@ function updateInventory() {
   // Set img srcs for search menu slots
   for (let i = 0; i < 6; i++) {
     const slot = inventorySearchSlots[i];
-    const img = slot.children[0];
+    const img = slot.firstChild;
     const slotData = inventory[i];
     if (slotData) {
       const itemType = ITEM_TYPES[slotData.id];
@@ -1952,7 +1983,7 @@ function updateInventory() {
   }
 
   // Set img src for mouse item
-  const mouseImg = mouseItemElem.children[0];
+  const mouseImg = mouseItemElem.firstChild;
   if (mouseItem) {
     const itemType = ITEM_TYPES[mouseItem.id];
     mouseImg.src = itemType.texture;

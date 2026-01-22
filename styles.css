@@ -152,6 +152,9 @@ body {
 .inventory-slot {
   width: 54px;
   height: 54px;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .inventory-slot img {
