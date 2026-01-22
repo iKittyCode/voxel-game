@@ -2,6 +2,7 @@
   --button-img: url("");
   --inventory-img: url("");
   --inventory-search-img: url("");
+  --inventory-slot-img: url("");
 }
 
 html,
@@ -92,6 +93,37 @@ body {
   background-image: var(--inventory-search-img);
   background-repeat: no-repeat;
   background-size: contain;
+}
+
+#inventory-search-input {
+  width: 294px;
+  height: 30px;
+  margin: 24px 0px 0px 72px;
+  border: none;
+  padding: 0px;
+  background: none;
+}
+
+#inventory-search-input:focus {
+  outline: none;
+  border: none;
+}
+
+#inventory-search-results {
+  width: 360px;
+  height: 234px;
+  margin: 12px 0px 0px 18px;
+  background-image: var(--inventory-slot-img);
+  background-size: 60px 60px;
+}
+
+#inventory-search-hotbar {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  width: 354px;
+  height: 54px;
+  margin: 18px 0px 0px 18px;
 }
 
 .inventory-slot-hotbar {

@@ -104,6 +104,7 @@ let isPaused = false;
 let isInventoryOpen = false;
 let isInventorySearchOpen = false;
 const inventorySlots = new Array(30);
+const inventorySearchSlots = new Array(6);
 const debugElem = document.getElementById("debug");
 const hotbar = document.getElementById("hotbar");
 const crosshair = document.getElementById("crosshair");
@@ -616,7 +617,7 @@ function onKeyDown(event) {
 
     // Inventory
     case "KeyE":
-      onToggleInventory();
+      if (!(event.target instanceof HTMLInputElement)) onToggleInventory();
       break;
   }
 }
@@ -1752,6 +1753,10 @@ function setupVars() {
     "--inventory-search-img",
     `url("${inventory_search_png}")`
   );
+  document.documentElement.style.setProperty(
+    "--inventory-slot-img",
+    `url("${inventory_slot_png}")`
+  );
 }
 
 /** Setup the hotbar */
@@ -1779,6 +1784,7 @@ function setupInventoryMenu() {
 
   const inventoryElem = document.getElementById("inventory");
   const inventorySearchElem = document.getElementById("inventory-search");
+  const inventorySearchHotbarElem = document.getElementById("inventory-search-hotbar");
   const leftBtn = document.getElementById("inventory-left");
   const rightBtn = document.getElementById("inventory-right");
 
@@ -1807,13 +1813,25 @@ function setupInventoryMenu() {
 
   inventorySearchElem.style.display = "none";
 
+  // Create hotbar slots for the search menu
+  for (let i = 0; i < 6; i++) {
+    const slot = document.createElement("div");
+    slot.classList.add("inventory-slot");
+    const img = document.createElement("img");
+    slot.onmousedown = withErrorHandling(() => onInventorySlotClicked(i));
+    slot.appendChild(img);
+    inventorySearchHotbarElem.appendChild(slot);
+    inventorySearchSlots[i] = slot;
+  }
+
+  // Setup navigation buttons
   leftBtn.src = left_button_png;
   rightBtn.src = right_button_png;
   leftBtn.onclick = rightBtn.onclick = withErrorHandling(() => {
     isInventorySearchOpen = !isInventorySearchOpen;
     if (isInventorySearchOpen) {
       inventoryElem.style.display = "none";
-      inventorySearchElem.style.display = "grid";
+      inventorySearchElem.style.display = "block";
     } else {
       inventoryElem.style.display = "grid";
       inventorySearchElem.style.display = "none";
@@ -1910,6 +1928,19 @@ function updateInventory() {
   // Set img srcs for each slot
   for (let i = 0; i < 30; i++) {
     const slot = inventorySlots[i];
+    const img = slot.children[0];
+    const slotData = inventory[i];
+    if (slotData) {
+      const itemType = ITEM_TYPES[slotData.id];
+      img.src = itemType.texture;
+    } else {
+      img.src = blank_png;
+    }
+  }
+
+  // Set img srcs for search menu slots
+  for (let i = 0; i < 6; i++) {
+    const slot = inventorySearchSlots[i];
     const img = slot.children[0];
     const slotData = inventory[i];
     if (slotData) {
