@@ -1,5 +1,8 @@
 :root {
   --button-img: url("");
+  --inventory-img: url("");
+  --inventory-search-img: url("");
+  --inventory-slot-img: url("");
 }
 
 html,
@@ -58,8 +61,125 @@ body {
   text-decoration: none;
 }
 
-#pause-menu {
+#inventory-buttons {
+  display: flex;
+  width: 372px;
+  justify-content: space-between;
+}
+
+#inventory-buttons img {
+  width: 24px;
+  height: 36px;
+}
+
+#inventory-buttons img:hover {
+  filter: brightness(0.7);
+}
+
+#inventory {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  width: 354px;
+  height: 348px;
+  padding: 18px 12px 18px 18px;
+  background-image: var(--inventory-img);
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+#inventory-search {
+  width: 402px;
+  height: 390px;
+  background-image: var(--inventory-search-img);
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+#inventory-search-input {
+  width: 294px;
+  height: 30px;
+  margin: 24px 0px 0px 72px;
+  border: none;
+  padding: 0px;
+  background: none;
+}
+
+#inventory-search-input:focus {
+  outline: none;
+  border: none;
+}
+
+#inventory-search-results {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  width: 366px;
+  height: 234px;
+  margin: 12px 0px 0px 18px;
+  padding-right: 6px;
+  background-image: var(--inventory-slot-img);
+  background-size: 60px 60px;
+  background-attachment: local;
+  overflow-x: hidden;
+  overflow-y: scroll;
+}
+
+#inventory-search-results::-webkit-scrollbar {
+  width: 12px;
+}
+
+#inventory-search-results::-webkit-scrollbar-track {
+  background: none;
+}
+
+#inventory-search-results::-webkit-scrollbar-thumb {
+  background-color: #ecbf81;
+}
+
+#inventory-search-hotbar {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  width: 354px;
+  height: 54px;
+  margin: 18px 0px 0px 18px;
+}
+
+.inventory-slot-hotbar {
+  margin-top: 54px;
+}
+
+.inventory-slot {
+  width: 54px;
+  height: 54px;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.inventory-slot img {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  top: 3px;
+  left: 3px;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+#pause-menu,
+#inventory-menu {
   background-color: #0008;
+}
+
+#mouse-item {
+  position: fixed;
+  width: 54px;
+  height: 54px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
 #load-list {
