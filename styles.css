@@ -112,6 +112,7 @@ body {
 
 #inventory-search-results {
   display: grid;
+  align-content: start;
   grid-template-columns: repeat(6, 1fr);
   gap: 6px;
   width: 366px;
