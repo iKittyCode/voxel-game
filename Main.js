@@ -162,9 +162,19 @@ function chunkKeyToArray(k) {
   return k.split(",").map(n => parseInt(n));
 }
 
+/** Get the chunk's generation rng from xz coords */
+function chunkRng(cx, cz) {
+  return new Alea(`${seed},${cx},${cz}`);
+}
+
 /** Get a location's generation rng from block xz coords */
 function locationRng(x, z) {
   return new Alea(`${seed},${x},_,${z}`);
+}
+
+/** Get a block's generation rng from xyz coords */
+function blockRng(x, y, z) {
+  return new Alea(`${seed},${x},${y},${z}`);
 }
 
 /** Convert a number 0-63 to its base64 representation character */
@@ -291,18 +301,18 @@ function initRandom() {
 
 /** Generate the noise functions */
 function generateNoiseFunctions(noiseSeed) {
-  const rng = new Alea(noiseSeed);
-
   // 1. Biome Map Noise
-  const biomeRng = new Alea(rng());
-  const biomeSimplex = createNoise2D(biomeRng);
+  const biomeNoiseRng = new Alea(`${noiseSeed}_biome`);
+  const biomeSimplex = createNoise2D(biomeNoiseRng);
   const bScale = WORLD_SETTINGS.biomeScale;
   biomeNoise = (x, z) => biomeSimplex(x / bScale, z / bScale);
 
   // 2. Per-Biome Noise Arrays
   BIOME_LIST.forEach(biome => {
+    const biomeRng = new Alea(`${noiseSeed}_${biome.id}`);
+
     // We map over intensities to create a noise function for each layer
-    const noiseFuncs = biome.terrain.intensities.map(_ => createNoise2D(new Alea(rng())));
+    const noiseFuncs = biome.terrain.intensities.map(_ => createNoise2D(new Alea(biomeRng())));
 
     biome.terrainHeightAt = (x, y) =>
       biome.terrain.baseHeight +
@@ -316,7 +326,8 @@ function generateNoiseFunctions(noiseSeed) {
   });
 
   // 3. Cave noise
-  const caveNoiseFuncs = CAVE_INTENSITIES.map(_ => createNoise3D(new Alea(rng())));
+  const caveRng = new Alea(`${noiseSeed}_cave`);
+  const caveNoiseFuncs = CAVE_INTENSITIES.map(_ => createNoise3D(new Alea(caveRng())));
   caveNoise = (x, y, z) =>
     caveNoiseFuncs
       .map(
@@ -1117,18 +1128,16 @@ function findTopBlockY(x, z) {
 /** Create a new world */
 function createWorld() {
   initWorld();
-
-  // Calculate spawn height safely
-  let spawnY = getTerrainHeight(0, 0) + 2;
-  // Ensure we don't spawn in a cave
-  if (spawnY < 5) spawnY = 80;
-
-  position = new THREE.Vector3(0, spawnY, 0);
-
+  position = new THREE.Vector3(0, 0, 0);
   controls.getObject().rotation.set(0, 0, 0);
   inventory = new Array(30);
   updateInventory();
   updateChunksAroundPlayer(false);
+
+  // Calculate spawn height safely
+  let spawnY = findTopBlockY(0, 0) + 1;
+  position = new THREE.Vector3(0.5, spawnY, 0.5);
+
   controls.lock();
 }
 
@@ -2089,9 +2098,11 @@ function updateDebug() {
     |
     Pos: ${position.x.toFixed(2)} ${position.y.toFixed(2)} ${position.z.toFixed(2)}
     |
+    Rot: ${THREE.Math.radToDeg(rotation.x).toFixed(2)} ${THREE.Math.radToDeg(rotation.y).toFixed(2)}
+    |
     Biome: ${biome}
     |
-    Temperature: ${temp.toFixed(2)}
+    Temp: ${temp.toFixed(2)}
   `;
 }
 
