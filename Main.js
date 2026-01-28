@@ -4,13 +4,21 @@
 
 // Constants:
 const BLOCK_TYPES = [
-  { name: "grass", color: 0x7cfc00, texPaths: [grass_png, dirt_png, grass_side_png, 2, 2, 2] },
-  { name: "dirt", color: 0x8b5a2b, texPaths: [dirt_png, 0, 0, 0, 0, 0] },
-  { name: "stone", color: 0x888888, texPaths: [stone_png, 0, 0, 0, 0, 0] },
-  { name: "wood", color: 0x8b4513, texPaths: [log_top_png, 0, log_side_png, 2, 2, 2] },
-  { name: "leaves", color: 0x2b843f, texPaths: [leaves_png, 0, 0, 0, 0, 0] },
+  { name: "grass", texPaths: [grass_png, dirt_png, grass_side_png, 2, 2, 2] },
+  { name: "dirt", texPaths: [dirt_png, 0, 0, 0, 0, 0] },
+  { name: "stone", texPaths: [stone_png, 0, 0, 0, 0, 0] },
+  { name: "wood", texPaths: [log_top_png, 0, log_side_png, 2, 2, 2] },
+  { name: "leaves", texPaths: [leaves_png, 0, 0, 0, 0, 0] },
+];
+const ITEM_TYPES = [
+  { name: "grass", texture: grass_item_png, blockName: "grass" },
+  { name: "dirt", texture: dirt_item_png, blockName: "dirt" },
+  { name: "stone", texture: stone_item_png, blockName: "stone" },
+  { name: "wood", texture: wood_item_png, blockName: "wood" },
+  { name: "leaves", texture: leaves_item_png, blockName: "leaves" },
 ];
 const BLOCK_ID = {}; // { name: id }
+const ITEM_ID = {}; // { name: id }
 
 const CUBE_SIZE = 1;
 const CAVE_MIN_THRESHOLD = 0.5; // Controls how many caves appear
@@ -76,19 +84,36 @@ let rotation = new THREE.Euler();
 let velocity = new THREE.Vector3();
 let speed = PLAYER_SPEED;
 let canJump = false;
-let selectedBlock = 0; // grass
+let hotbarIndex = 0;
 let camOffset = CAM_OFFSET.clone();
 let sprintTapLastTime = 0;
 let isDoubleTapSprinting = false;
 
+let inventory = new Array(30); // [{ id }]
+let mouseItem;
+
 // UI
 let isUIVisible = true;
+let isPaused = false;
+let isInventoryOpen = false;
+let isInventorySearchOpen = false;
+const inventorySlots = new Array(30);
+const inventorySearchSlots = new Array(6);
+const debugElem = document.getElementById("debug");
 const hotbar = document.getElementById("hotbar");
+const crosshair = document.getElementById("crosshair");
 const mainMenu = document.getElementById("main-menu");
 const pauseMenu = document.getElementById("pause-menu");
+const inventoryMenu = document.getElementById("inventory-menu");
+const inventorySearchInput = document.getElementById("inventory-search-input");
+const inventorySearchResults = document.getElementById("inventory-search-results");
+const mouseItemElem = document.getElementById("mouse-item");
 const settingsMenu = document.getElementById("settings-menu");
 const createMenu = document.getElementById("create-menu");
 const createSeedInput = document.getElementById("create-seed");
+const createNameInput = document.getElementById("create-name");
+const loadMenu = document.getElementById("load-menu");
+const loadMenuList = document.getElementById("load-list");
 const importMenu = document.getElementById("import-menu");
 const importSaveInput = document.getElementById("import-code");
 const gameElem = document.getElementById("game");
@@ -195,36 +220,31 @@ function init() {
   setupUI();
 
   // Generate stuff
-  generateBlockIDs();
-  generateBlockMaterials();
+  generateBlockData();
+  generateItemData();
 
   // Event listeners
-  window.addEventListener("resize", withErrorHandling(onWindowResize), false);
+  window.addEventListener("resize", withErrorHandling(onWindowResize));
+  window.addEventListener("beforeunload", withErrorHandling(onBeforeUnload));
   renderer.domElement.addEventListener("contextmenu", e => e.preventDefault());
-  document.addEventListener("mousedown", withErrorHandling(onMouseDown), false);
+  document.addEventListener("mousedown", withErrorHandling(onMouseDown));
+  document.addEventListener("mousemove", withErrorHandling(onMouseMove));
   document.addEventListener("wheel", withErrorHandling(onScroll));
-  document.addEventListener("keydown", withErrorHandling(onKeyDown), false);
-  document.addEventListener("keyup", withErrorHandling(onKeyUp), false);
+  document.addEventListener("keydown", withErrorHandling(onKeyDown));
+  document.addEventListener("keyup", withErrorHandling(onKeyUp));
 
   // Frame loop
   animate();
 }
 
-/** Populate the `BLOCK_ID` object with the ids of blocks from their names */
-function generateBlockIDs() {
+/** Generate all block data */
+function generateBlockData() {
+  // Block name to id mapping
   BLOCK_TYPES.forEach((type, i) => {
     BLOCK_ID[type.name] = i;
   });
-}
 
-/** Initialize all random functions from the global seed */
-function initRandom() {
-  const rng = new Alea(seed);
-  generateNoiseFunctions(rng());
-}
-
-/** Generate materials for each block type */
-function generateBlockMaterials() {
+  // Block type materials
   for (const blockType of Object.values(BLOCK_TYPES)) {
     blockType.materials = [];
 
@@ -248,6 +268,25 @@ function generateBlockMaterials() {
       blockType.materials.push(material);
     }
   }
+}
+
+/** Generate all item data */
+function generateItemData() {
+  // Item name to id mapping
+  ITEM_TYPES.forEach((type, i) => {
+    ITEM_ID[type.name] = i;
+  });
+
+  // Item type block ids
+  ITEM_TYPES.forEach(type => {
+    type.blockID = BLOCK_ID[type.blockName];
+  });
+}
+
+/** Initialize all random functions from the global seed */
+function initRandom() {
+  const rng = new Alea(seed);
+  generateNoiseFunctions(rng());
 }
 
 /** Generate the noise functions */
@@ -331,7 +370,7 @@ function calculatePlayerMovement(deltaTime) {
   // Compute xz movement
   let moveDir = new THREE.Vector3();
 
-  if (controls.isLocked) {
+  if (controls.isLocked && !isInventoryOpen) {
     moveDir.x = moveControls.right - moveControls.left;
     moveDir.z = moveControls.back - moveControls.forward;
     moveDir.normalize();
@@ -493,6 +532,14 @@ function onWindowResize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+/** Callback for before the page unloads, to show the "changes you made may not be saved" dialog */
+function onBeforeUnload(event) {
+  if (playing) {
+    event.preventDefault();
+    event.returnValue = "";
+  }
+}
+
 /** Callback for key press */
 function onKeyDown(event) {
   if (event.repeat) return;
@@ -541,28 +588,33 @@ function onKeyDown(event) {
 
     // Hotbar
     case "Digit1":
-      selectedBlock = 0;
+      hotbarIndex = 0;
       updateHotbar();
       break;
     case "Digit2":
-      selectedBlock = 1;
+      hotbarIndex = 1;
       updateHotbar();
       break;
     case "Digit3":
-      selectedBlock = 2;
+      hotbarIndex = 2;
       updateHotbar();
       break;
     case "Digit4":
-      selectedBlock = 3;
+      hotbarIndex = 3;
       updateHotbar();
       break;
     case "Digit5":
-      selectedBlock = 4;
+      hotbarIndex = 4;
       updateHotbar();
       break;
     case "Digit6":
-      selectedBlock = 5;
+      hotbarIndex = 5;
       updateHotbar();
+      break;
+
+    // Inventory
+    case "KeyE":
+      if (!(event.target instanceof HTMLInputElement)) onToggleInventory();
       break;
   }
 }
@@ -604,7 +656,13 @@ function onKeyUp(event) {
 /** Callback for mouse click */
 function onMouseDown(event) {
   // Only break blocks when playing
-  if (!controls.isLocked) return;
+  if (!playing) return;
+
+  // Allow clicking into pointer lock if pause menu or inventory is not shown
+  if (!controls.isLocked) {
+    if (!isPaused && !isInventoryOpen) controls.lock();
+    return;
+  }
 
   // All breakable block hitboxes
   const blockHitboxes = createBlockRangeHitboxes(
@@ -628,17 +686,23 @@ function onMouseDown(event) {
     if (event.button === 0) {
       // Left click
       removeBlock(pos[0], pos[1], pos[2], false);
-    } else if (event.button === 2 && selectedBlock < BLOCK_TYPES.length) {
-      // Right click: place position is translated by the normal of the face
-      const face = first.face;
-      const normal = face.normal;
-      const placeX = pos[0] + normal.x;
-      const placeY = pos[1] + normal.y;
-      const placeZ = pos[2] + normal.z;
+    } else if (event.button === 2) {
+      // Get selected hotbar block
+      const item = inventory[hotbarIndex];
+      if (item) {
+        const block = ITEM_TYPES[item.id].blockID;
 
-      // Prevent placing inside player
-      if (!playerCollidesBlock(placeX, placeY, placeZ)) {
-        placeBlock(selectedBlock, placeX, placeY, placeZ, false);
+        // Right click: place position is translated by the normal of the face
+        const face = first.face;
+        const normal = face.normal;
+        const placeX = pos[0] + normal.x;
+        const placeY = pos[1] + normal.y;
+        const placeZ = pos[2] + normal.z;
+
+        // Prevent placing inside player
+        if (!playerCollidesBlock(placeX, placeY, placeZ)) {
+          placeBlock(block, placeX, placeY, placeZ, false);
+        }
       }
     }
   }
@@ -647,11 +711,19 @@ function onMouseDown(event) {
   for (const hitbox of blockHitboxes) hitbox.geometry.dispose();
 }
 
+/** Callback for mouse move */
+function onMouseMove(event) {
+  if (!isInventoryOpen) return;
+
+  mouseItemElem.style.left = event.clientX + "px";
+  mouseItemElem.style.top = event.clientY + "px";
+}
+
 /** Callback for mouse scroll */
 function onScroll(event) {
-  if (event.deltaY > 0) selectedBlock++;
-  else selectedBlock--;
-  selectedBlock = mod(selectedBlock, 6);
+  if (event.deltaY > 0) hotbarIndex++;
+  else hotbarIndex--;
+  hotbarIndex = mod(hotbarIndex, 6);
   updateHotbar();
 }
 
@@ -659,9 +731,7 @@ function onScroll(event) {
 function onMainCreate() {
   createMenu.style.display = "flex";
   createSeedInput.value = "";
-  // Reset the name input if it exists
-  const nameInput = document.getElementById("create-name");
-  if (nameInput) nameInput.value = "";
+  createNameInput.value = "";
 }
 
 /** Open the main import menu */
@@ -672,26 +742,24 @@ function onMainImport() {
 
 /** Create world */
 function onCreate() {
-  const nameInput = document.getElementById("create-name");
-  const nameVal = nameInput ? nameInput.value.trim() : "Untitled";
+  let nameVal = createNameInput.value.trim();
 
-  if (!nameVal) {
-    alert("Please enter a world name.");
-    return;
-  }
+  if (!nameVal) nameVal = "New World";
 
   // Check if overwrite
-  if (localStorage.getItem(SAVE_PREFIX + nameVal)) {
-    if (!confirm("A world with this name already exists. Overwrite?")) return;
+  const keys = JSON.parse(localStorage.getItem("voxel_saves"));
+  if (keys && keys.includes(SAVE_PREFIX + nameVal)) {
+    alert(`A world with the name ${nameVal} already exists.`);
+    return;
   }
 
   currentWorldName = nameVal;
   seed = createSeedInput.value;
+  if (!seed) seed = Math.floor(Math.random() * 1000000000000000).toString();
 
   createMenu.style.display = "none";
   mainMenu.style.display = "none";
 
-  if (!seed) seed = Math.floor(Math.random() * 1000000000000000).toString();
   createWorld();
 }
 
@@ -699,75 +767,124 @@ function onCreate() {
 function onSave() {
   const save = generateSaveCode();
   localStorage.setItem(SAVE_PREFIX + currentWorldName, save);
-  alert(`Game saved as "${currentWorldName}"!`);
+
+  const keys = JSON.parse(localStorage.getItem("voxel_saves")) || [];
+  if (!keys.includes(SAVE_PREFIX + currentWorldName)) {
+    keys.unshift(SAVE_PREFIX + currentWorldName);
+    localStorage.setItem("voxel_saves", JSON.stringify(keys));
+  }
 }
 
 /** Open the new load menu and populate list */
 function onOpenLoadMenu() {
   mainMenu.style.display = "none";
-  const loadMenu = document.getElementById("load-menu");
   loadMenu.style.display = "flex";
+  loadMenuList.innerHTML = "";
 
-  const list = document.getElementById("load-list");
-  list.innerHTML = "";
-
-  let foundSaves = false;
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key.startsWith(SAVE_PREFIX)) {
-      foundSaves = true;
-      const worldName = key.replace(SAVE_PREFIX, "");
-
-      const row = document.createElement("div");
-      row.style.cssText =
-        "display: flex; justify-content: space-between; margin: 5px 0; background: rgba(0,0,0,0.3); padding: 5px;";
-
-      const nameLabel = document.createElement("span");
-      nameLabel.textContent = worldName;
-      nameLabel.style.cssText = "color: white; padding: 5px; font-size: 18px;";
-
-      const btnGroup = document.createElement("div");
-
-      // Load Button
-      const loadBtn = document.createElement("button");
-      loadBtn.textContent = "Play";
-      loadBtn.style.fontSize = "14px";
-      loadBtn.onclick = () => {
-        currentWorldName = worldName;
-        const saveCode = localStorage.getItem(key);
-        document.getElementById("load-menu").style.display = "none";
-        loadWorld(saveCode);
-      };
-
-      // Delete Button
-      const delBtn = document.createElement("button");
-      delBtn.textContent = "Delete";
-      delBtn.style.fontSize = "14px";
-      delBtn.style.backgroundColor = "#ff4444";
-      delBtn.style.marginLeft = "5px";
-      delBtn.onclick = () => {
-        if (confirm(`Are you sure you want to delete "${worldName}"?`)) {
-          localStorage.removeItem(key);
-          onOpenLoadMenu(); // Refresh list
-        }
-      };
-
-      btnGroup.appendChild(loadBtn);
-      btnGroup.appendChild(delBtn);
-      row.appendChild(nameLabel);
-      row.appendChild(btnGroup);
-      list.appendChild(row);
-    }
+  // Get save key order
+  const keys = JSON.parse(localStorage.getItem("voxel_saves"));
+  if (!keys || !keys.length) {
+    const msg = document.createElement("p");
+    msg.textContent = "No saved worlds found.";
+    loadMenuList.appendChild(msg);
+    return;
   }
 
-  if (!foundSaves) {
-    list.innerHTML = "<p style='color: white;'>No saved worlds found.</p>";
+  // Display each one
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    const worldName = key.replace(SAVE_PREFIX, "");
+
+    const row = document.createElement("div");
+    const nameLabel = document.createElement("span");
+    const btnGroup = document.createElement("div");
+    const btnsLeft = document.createElement("div");
+    const btnsRight = document.createElement("div");
+
+    row.classList.add("load-menu-row");
+    btnGroup.classList.add("load-menu-buttons");
+    nameLabel.textContent = worldName;
+
+    // Load Button
+    const loadBtn = document.createElement("button");
+    loadBtn.textContent = "Play";
+    loadBtn.onclick = withErrorHandling(() => {
+      currentWorldName = worldName;
+      const saveCode = localStorage.getItem(key);
+      loadMenu.style.display = "none";
+      loadWorld(saveCode);
+    });
+
+    // Rename Button
+    const renameBtn = document.createElement("button");
+    renameBtn.textContent = "Rename";
+    renameBtn.onclick = withErrorHandling(() => {
+      const newName = prompt(`Rename ${worldName} to:`);
+      const newKey = SAVE_PREFIX + newName;
+      if (!newName) return;
+      if (keys.includes(newKey)) {
+        alert(`A world with the name ${newName} already exists.`);
+        return;
+      }
+
+      const saveStr = localStorage.getItem(key);
+      localStorage.removeItem(key);
+      const save = JSON.parse(saveStr);
+      save.name = newName;
+      localStorage.setItem(newKey, JSON.stringify(save));
+      keys[keys.indexOf(key)] = newKey;
+      localStorage.setItem("voxel_saves", JSON.stringify(keys));
+      onOpenLoadMenu(); // refresh list
+    });
+
+    // Delete Button
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "Delete";
+    delBtn.onclick = withErrorHandling(() => {
+      if (confirm(`Are you sure you want to delete "${worldName}"?`)) {
+        localStorage.removeItem(key);
+        keys.splice(keys.indexOf(key), 1);
+        localStorage.setItem("voxel_saves", JSON.stringify(keys));
+        onOpenLoadMenu(); // refresh list
+      }
+    });
+
+    // Move Buttons
+    const upBtn = document.createElement("img");
+    upBtn.src = up_button_png;
+    upBtn.onclick = withErrorHandling(() => {
+      if (i !== 0) {
+        [keys[i], keys[i - 1]] = [keys[i - 1], keys[i]];
+        localStorage.setItem("voxel_saves", JSON.stringify(keys));
+        onOpenLoadMenu(); // refresh list
+      }
+    });
+    const downBtn = document.createElement("img");
+    downBtn.src = down_button_png;
+    downBtn.onclick = withErrorHandling(() => {
+      if (i !== keys.length - 1) {
+        [keys[i], keys[i + 1]] = [keys[i + 1], keys[i]];
+        localStorage.setItem("voxel_saves", JSON.stringify(keys));
+        onOpenLoadMenu(); // refresh list
+      }
+    });
+
+    btnsLeft.appendChild(loadBtn);
+    btnsLeft.appendChild(renameBtn);
+    btnsLeft.appendChild(delBtn);
+    btnsRight.appendChild(upBtn);
+    btnsRight.appendChild(downBtn);
+    btnGroup.appendChild(btnsLeft);
+    btnGroup.appendChild(btnsRight);
+    row.appendChild(nameLabel);
+    row.appendChild(btnGroup);
+    loadMenuList.appendChild(row);
   }
 }
 
 /** Close the load menu */
 function onCloseLoadMenu() {
-  document.getElementById("load-menu").style.display = "none";
+  loadMenu.style.display = "none";
   mainMenu.style.display = "flex";
 }
 
@@ -798,10 +915,16 @@ function onExportSave() {
 function onPointerLockChange() {
   if (controls.isLocked) {
     // Unpause game
-    pauseMenu.style.display = "none";
+    if (isPaused) {
+      pauseMenu.style.display = "none";
+      isPaused = false;
+    }
   } else {
     // Pause game
-    pauseMenu.style.display = "flex";
+    if (!isInventoryOpen) {
+      pauseMenu.style.display = "flex";
+      isPaused = true;
+    }
 
     // Release all keys
     for (const k of Object.keys(moveControls)) moveControls[k] = false;
@@ -811,6 +934,84 @@ function onPointerLockChange() {
 /** Callback for clicking resume button */
 function onResume() {
   controls.lock();
+}
+
+/** Callback for toggling inventory visibility */
+function onToggleInventory() {
+  // Prevent opening inventory on pause screen or when not playing
+  if (isPaused || !playing) return;
+
+  isInventoryOpen = !isInventoryOpen;
+  if (isInventoryOpen) {
+    inventoryMenu.style.display = "flex";
+    controls.unlock();
+    updateInventory();
+  } else {
+    inventoryMenu.style.display = "none";
+    controls.lock();
+  }
+}
+
+/** Callback for clicking on an inventory slot */
+function onInventorySlotClicked(index) {
+  if (inventory[index]) {
+    // Inventory slot is filled
+    if (mouseItem) {
+      // Mouse has item: swap
+      const item = mouseItem;
+      mouseItem = inventory[index];
+      inventory[index] = item;
+    } else {
+      // Mouse does not have item: pick up
+      mouseItem = inventory[index];
+      delete inventory[index];
+    }
+  } else {
+    // Inventory slot is not filled
+    if (mouseItem) {
+      // Mouse has item: put down
+      inventory[index] = mouseItem;
+      mouseItem = undefined;
+    } else {
+      // Mouse does not have item: do nothing
+      return;
+    }
+  }
+
+  updateInventory();
+}
+
+/** Callback for input into the inventory search menu */
+function onInventorySearch() {
+  const results = [];
+  const keyword = inventorySearchInput.value;
+
+  // Search block names
+  for (let i = 0; i < ITEM_TYPES.length; i++) {
+    const itemType = ITEM_TYPES[i];
+    if (itemType.name.includes(keyword)) results.push(i);
+  }
+
+  // Clear old results ui
+  while (inventorySearchResults.firstChild) {
+    inventorySearchResults.removeChild(inventorySearchResults.firstChild);
+  }
+
+  // Add new results
+  for (const itemID of results) {
+    const slot = document.createElement("div");
+    slot.classList.add("inventory-slot");
+    const img = document.createElement("img");
+    slot.onmousedown = withErrorHandling((event) => {
+      // Set mouse item to the id
+      mouseItem = { id: itemID };
+      updateInventory();
+      event.stopPropagation();
+    });
+    img.src = ITEM_TYPES[itemID].texture;
+    slot.appendChild(img);
+    inventorySearchResults.appendChild(slot);
+  }
 }
 
 /** Callback for clicking settings button */
@@ -835,8 +1036,12 @@ function onCloseImport() {
 
 /** Callback for clicking quit button */
 function onQuitWorld() {
+  // Save before quitting
+  onSave();
+
   destroyWorld();
   pauseMenu.style.display = "none";
+  isPaused = false;
   mainMenu.style.display = "flex";
 }
 
@@ -921,6 +1126,8 @@ function createWorld() {
   position = new THREE.Vector3(0, spawnY, 0);
 
   controls.getObject().rotation.set(0, 0, 0);
+  inventory = new Array(30);
+  updateInventory();
   updateChunksAroundPlayer(false);
   controls.lock();
 }
@@ -929,6 +1136,7 @@ function createWorld() {
 function loadWorld(saveCode) {
   loadSaveCode(saveCode);
   initWorld();
+  updateInventory();
   updateChunksAroundPlayer(false);
   controls.lock();
 }
@@ -1106,6 +1314,20 @@ function isCave(x, y, z) {
   return caveNoise(x, y, z) > threshold * CAVE_INTENSITIES_SUM;
 }
 
+/** Generator for relative chunk coordinates for chunk generation order */
+function* chunkGenOrder() {
+  yield [0, 0];
+
+  for (let i = 1; i <= chunkDistance; i++) {
+    for (let j = 0; j < 2 * i; j++) {
+      yield [-i + j, -i];
+      yield [i, -i + j];
+      yield [i - j, i];
+      yield [-i, i - j];
+    }
+  }
+}
+
 /** Generate a tree with root at the specified location */
 function generateTree(x, y, z, cx, cz, rng, treeConfig) {
   // Randomly generate trunk height
@@ -1247,20 +1469,19 @@ function updateChunksAroundPlayer(generateOne) {
   const pcz = Math.floor(pz / CHUNK_SIZE);
 
   // Generate nearby chunks with radius in a square formation
-  for (let dx = -chunkDistance; dx <= chunkDistance; dx++) {
-    for (let dz = -chunkDistance; dz <= chunkDistance; dz++) {
-      const generatedChunk = generateChunk(pcx + dx, pcz + dz);
-      if (generateOne && generatedChunk) {
-        generated = true;
-        break;
-      }
+  for (const [dx, dz] of chunkGenOrder()) {
+    const generatedChunk = generateChunk(pcx + dx, pcz + dz);
+    if (generateOne && generatedChunk) {
+      generated = true;
+      break;
     }
-    if (generated) break;
   }
 
   // Update meshes
   if (!generated) {
-    for (const [ck, chunk] of Object.entries(chunks)) {
+    for (const [dx, dz] of chunkGenOrder()) {
+      const ck = chunkKey(pcx + dx, pcz + dz);
+      const chunk = chunks[ck];
       if (chunk.updateMesh) {
         scene.remove(chunk.mesh);
         generateChunkMesh(ck);
@@ -1422,7 +1643,6 @@ function generateSaveCode() {
     if (chunk.modified) {
       chunksEncoded[ck] = {
         blocks: generateChunkSaveCode(chunk),
-        modified: true,
       };
     }
   }
@@ -1431,10 +1651,15 @@ function generateSaveCode() {
   const pos = [position.x, position.y, position.z];
   const vel = [velocity.x, velocity.y, velocity.z];
   const rot = [rotation.x, rotation.y, rotation.z];
+  const inv = {
+    slots: inventory,
+    mouseItem,
+  };
   const save = {
     saveVersion: 1,
     seed,
-    player: { position: pos, velocity: vel, rotation: rot, canJump },
+    name: currentWorldName,
+    player: { position: pos, velocity: vel, rotation: rot, canJump, inventory: inv },
     chunks: chunksEncoded,
   };
 
@@ -1459,16 +1684,33 @@ function loadSaveCode(save) {
 function loadSaveCode1(save) {
   // Decode and update misc data
   seed = save.seed;
+  currentWorldName = save.name;
+  if (!currentWorldName) {
+    const keys = JSON.parse(localStorage.getItem("voxel_saves"));
+    while (true) {
+      if (currentWorldName) {
+        currentWorldName = prompt(
+          `A world with the name ${currentWorldName} already exists. Enter a different name:`
+        );
+      } else {
+        currentWorldName = prompt("Enter a name for this world:");
+      }
+
+      if (currentWorldName && !(keys && keys.includes(SAVE_PREFIX + currentWorldName))) break;
+    }
+  }
   initRandom();
+
   position = new THREE.Vector3(...save.player.position);
   velocity = new THREE.Vector3(...save.player.velocity);
   camera.quaternion.setFromEuler(new THREE.Euler(...save.player.rotation, "YXZ"));
   canJump = save.player.canJump;
 
-  // Delete all old chunks
-  for (const ck of Object.keys(chunks)) {
-    scene.remove(chunks[ck].mesh);
-    delete chunks[ck];
+  if (save.player.inventory) {
+    inventory = save.player.inventory.slots;
+    mouseItem = save.player.inventory.mouseItem;
+  } else {
+    inventory = new Array(30);
   }
 
   // Decode and add new chunks
@@ -1477,7 +1719,7 @@ function loadSaveCode1(save) {
       blocks: decodeChunkSaveCode(chunk.blocks),
       loaded: false,
       updateMesh: true,
-      modified: chunk.modified,
+      modified: true,
     };
   }
 }
@@ -1486,16 +1728,31 @@ function loadSaveCode1(save) {
 function loadSaveCode0(save) {
   // Decode and update misc data
   seed = "0";
+  currentWorldName = save.name;
+  if (!currentWorldName) {
+    const keys = JSON.parse(localStorage.getItem("voxel_saves"));
+    while (true) {
+      if (currentWorldName) {
+        currentWorldName = prompt(
+          `A world with the name ${currentWorldName} already exists. Enter a different name:`
+        );
+      } else {
+        currentWorldName = prompt("Enter a name for this world:");
+      }
+
+      if (currentWorldName && !(keys && keys.includes(SAVE_PREFIX + currentWorldName))) break;
+    }
+  }
   initRandom();
+
   position = new THREE.Vector3(...save.player.position);
   velocity = new THREE.Vector3(...save.player.velocity);
   camera.quaternion.setFromEuler(new THREE.Euler(...save.player.rotation, "YXZ"));
   canJump = save.player.canJump;
 
-  // Delete all old chunks
-  for (const ck of Object.keys(chunks)) {
-    scene.remove(chunks[ck].mesh);
-    delete chunks[ck];
+  if (save.player.inventory) {
+    inventory = save.player.inventory.slots;
+    mouseItem = save.player.inventory.mouseItem;
   }
 
   // Decode and add new chunks
@@ -1584,34 +1841,30 @@ function setupUI() {
   setupVars();
   setupHotbar();
   setupMainMenu();
+  setupInventoryMenu();
   setupPauseMenu();
   setupSettings();
   setupCreateMenu();
+  setupLoadMenu();
   setupImportMenu();
 }
 
 /** Setup CSS variables */
 function setupVars() {
   document.documentElement.style.setProperty("--button-img", `url("${button_png}")`);
+  document.documentElement.style.setProperty("--inventory-img", `url("${inventory_png}")`);
+  document.documentElement.style.setProperty(
+    "--inventory-search-img",
+    `url("${inventory_search_png}")`
+  );
+  document.documentElement.style.setProperty(
+    "--inventory-slot-img",
+    `url("${inventory_slot_png}")`
+  );
 }
 
 /** Setup the hotbar */
 function setupHotbar() {
-  // Preset all images to blank
-  Array.from(hotbar.children).forEach(img => {
-    img.src = blank_png;
-  });
-
-  // Set block images
-  BLOCK_TYPES.forEach((blockType, i) => {
-    // Get image source
-    let texPath = blockType.texPaths[2];
-    if (typeof texPath === "number") texPath = blockType.texPaths[texPath];
-
-    // Set the corresponding image
-    hotbar.children[i].src = texPath;
-  });
-
   // Update
   updateHotbar();
 }
@@ -1622,18 +1875,79 @@ function setupMainMenu() {
   const loadButton = document.getElementById("main-load");
   const importButton = document.getElementById("main-import");
   const settingsButton = document.getElementById("main-settings");
-  const loadBackButton = document.getElementById("load-back");
 
   createButton.onclick = withErrorHandling(onMainCreate);
   loadButton.onclick = withErrorHandling(onOpenLoadMenu);
   importButton.onclick = withErrorHandling(onMainImport);
   settingsButton.onclick = withErrorHandling(onOpenSettings);
+}
 
-  if (loadBackButton) {
-    loadBackButton.onclick = withErrorHandling(onCloseLoadMenu);
-  } else {
-    console.warn("Load back button not found! Did you update index.html?");
+/** Setup the inventory menu */
+function setupInventoryMenu() {
+  inventoryMenu.style.display = "none";
+
+  const inventoryElem = document.getElementById("inventory");
+  const inventorySearchElem = document.getElementById("inventory-search");
+  const inventorySearchHotbarElem = document.getElementById("inventory-search-hotbar");
+  const leftBtn = document.getElementById("inventory-left");
+  const rightBtn = document.getElementById("inventory-right");
+
+  // Create non-hotbar inventory slots
+  for (let i = 6; i < 30; i++) {
+    const slot = document.createElement("div");
+    slot.classList.add("inventory-slot");
+    const img = document.createElement("img");
+    slot.onmousedown = withErrorHandling(() => onInventorySlotClicked(i));
+    slot.appendChild(img);
+    inventoryElem.appendChild(slot);
+    inventorySlots[i] = slot;
   }
+
+  // Create hotbar inventory slots
+  for (let i = 0; i < 6; i++) {
+    const slot = document.createElement("div");
+    slot.classList.add("inventory-slot");
+    slot.classList.add("inventory-slot-hotbar");
+    const img = document.createElement("img");
+    slot.onmousedown = withErrorHandling(() => onInventorySlotClicked(i));
+    slot.appendChild(img);
+    inventoryElem.appendChild(slot);
+    inventorySlots[i] = slot;
+  }
+
+  inventorySearchElem.style.display = "none";
+  inventorySearchInput.oninput = withErrorHandling(onInventorySearch);
+  onInventorySearch(); // initial results
+  inventorySearchResults.onmousedown = withErrorHandling(() => {
+    // Delete mouse item
+    mouseItem = undefined;
+    updateInventory();
+  });
+
+  // Create hotbar slots for the search menu
+  for (let i = 0; i < 6; i++) {
+    const slot = document.createElement("div");
+    slot.classList.add("inventory-slot");
+    const img = document.createElement("img");
+    slot.onmousedown = withErrorHandling(() => onInventorySlotClicked(i));
+    slot.appendChild(img);
+    inventorySearchHotbarElem.appendChild(slot);
+    inventorySearchSlots[i] = slot;
+  }
+
+  // Setup navigation buttons
+  leftBtn.src = left_button_png;
+  rightBtn.src = right_button_png;
+  leftBtn.onclick = rightBtn.onclick = withErrorHandling(() => {
+    isInventorySearchOpen = !isInventorySearchOpen;
+    if (isInventorySearchOpen) {
+      inventoryElem.style.display = "none";
+      inventorySearchElem.style.display = "block";
+    } else {
+      inventoryElem.style.display = "grid";
+      inventorySearchElem.style.display = "none";
+    }
+  });
 }
 
 /** Setup the pause menu */
@@ -1682,6 +1996,15 @@ function setupCreateMenu() {
   back.onclick = withErrorHandling(onCloseCreate);
 }
 
+/** Setup the load menu with world selection */
+function setupLoadMenu() {
+  loadMenu.style.display = "none";
+
+  const loadBackButton = document.getElementById("load-back");
+
+  loadBackButton.onclick = withErrorHandling(onCloseLoadMenu);
+}
+
 /** Setup the import menu */
 function setupImportMenu() {
   importMenu.style.display = "none";
@@ -1695,8 +2018,61 @@ function setupImportMenu() {
 
 /** Update the hotbar to reflect the selected block */
 function updateHotbar() {
+  // Set selected background image
   const selectImgs = [hotbar0_png, hotbar1_png, hotbar2_png, hotbar3_png, hotbar4_png, hotbar5_png];
-  hotbar.style.backgroundImage = `url("${selectImgs[selectedBlock]}")`;
+  hotbar.style.backgroundImage = `url("${selectImgs[hotbarIndex]}")`;
+
+  // Set item images
+  Array.from(hotbar.children).forEach((image, i) => {
+    const item = inventory[i];
+    if (item) {
+      const itemType = ITEM_TYPES[item.id];
+      image.src = itemType.texture;
+    } else {
+      image.src = blank_png;
+    }
+  });
+}
+
+/** Update the inventory UI */
+function updateInventory() {
+  // Set img srcs for each slot
+  for (let i = 0; i < 30; i++) {
+    const slot = inventorySlots[i];
+    const img = slot.firstChild;
+    const slotData = inventory[i];
+    if (slotData) {
+      const itemType = ITEM_TYPES[slotData.id];
+      img.src = itemType.texture;
+    } else {
+      img.src = blank_png;
+    }
+  }
+
+  // Set img srcs for search menu slots
+  for (let i = 0; i < 6; i++) {
+    const slot = inventorySearchSlots[i];
+    const img = slot.firstChild;
+    const slotData = inventory[i];
+    if (slotData) {
+      const itemType = ITEM_TYPES[slotData.id];
+      img.src = itemType.texture;
+    } else {
+      img.src = blank_png;
+    }
+  }
+
+  // Set img src for mouse item
+  const mouseImg = mouseItemElem.firstChild;
+  if (mouseItem) {
+    const itemType = ITEM_TYPES[mouseItem.id];
+    mouseImg.src = itemType.texture;
+  } else {
+    mouseImg.src = blank_png;
+  }
+
+  // Update hotbar to match inventory
+  updateHotbar();
 }
 
 /** Update the debug text */
@@ -1719,17 +2095,16 @@ function updateDebug() {
   `;
 }
 
-// TOGGLE UI VISIBILITY
+/** Toggle UI visibility */
 function toggleUI() {
   isUIVisible = !isUIVisible;
   // If visible, clear the inline style so CSS takes over. If not, set to none.
   const displayStyle = isUIVisible ? "" : "none";
 
-  const hudElements = ["hotbar", "crosshair", "debug"];
+  const hudElements = [debugElem, hotbar, crosshair];
 
-  hudElements.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = displayStyle;
+  hudElements.forEach(el => {
+    el.style.display = displayStyle;
   });
 }
 
