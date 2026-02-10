@@ -291,6 +291,9 @@ function generateBlockData() {
         const settings = { map: texture };
         if (blockType.translucent) {
           settings.transparent = true;
+          settings.polygonOffset = true;
+          settings.polygonOffsetFactor = 0.1;
+          settings.polygonOffsetUnits = 0.1;
         } else if (blockType.transparent) {
           settings.transparent = true;
           settings.alphaTest = 0.5;
@@ -303,6 +306,8 @@ function generateBlockData() {
         if (blockType.translucent) {
           // Set back face materials
           settings.side = THREE.BackSide;
+          settings.polygonOffsetFactor = -0.1;
+          settings.polygonOffsetUnits = -0.1;
           const backMaterial = new THREE.MeshStandardMaterial(settings);
           blockType.materialsBack.push(backMaterial);
         }
@@ -1588,19 +1593,13 @@ function generateChunkMesh(ck) {
         blockType.materialsBack[2],
         blockType.materialsBack[4],
       ];
-      const cubeFront = new THREE.Mesh(geo, matFront);
       const cubeBack = new THREE.Mesh(geo, matBack);
+      const cubeFront = new THREE.Mesh(geo, matFront);
 
       cubeFront.position.set(x + CUBE_SIZE / 2, y + CUBE_SIZE / 2, z + CUBE_SIZE / 2);
       cubeBack.position.set(x + CUBE_SIZE / 2, y + CUBE_SIZE / 2, z + CUBE_SIZE / 2);
-      cubeFront.renderOrder = 1;
-      cubeBack.renderOrder = 0;
 
-      // Prevent z-fighting
-      cubeFront.scale.set(0.999, 0.999, 0.999);
-      cubeBack.scale.set(0.999, 0.999, 0.999);
-
-      chunk.trnsMeshes.push(cubeFront, cubeBack);
+      chunk.trnsMeshes.push(cubeBack, cubeFront);
       return;
     }
 
