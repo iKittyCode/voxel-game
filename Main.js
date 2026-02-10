@@ -1603,14 +1603,31 @@ function generateChunkMesh(ck) {
       return;
     }
 
-    // Add all faces if transparent
+    // Add all faces if transparent except if shared by same block type
     if (blockType.transparent) {
-      facesByID[block.id][0].push(x, y, z);
-      facesByID[block.id][1].push(x, y, z);
-      facesByID[block.id][2].push(x, y, z);
-      facesByID[block.id][3].push(x, y, z);
-      facesByID[block.id][4].push(x, y, z);
-      facesByID[block.id][5].push(x, y, z);
+      const id = chunk.blocks[k].id;
+
+      if (x <= lxn || !chunk.blocks[k + oxn] || id != chunk.blocks[k + oxn].id) {
+        facesByID[block.id][5].push(x, y, z);
+      }
+      if (x >= lxp || !chunk.blocks[k + oxp] || id != chunk.blocks[k + oxp].id) {
+        facesByID[block.id][3].push(x, y, z);
+      }
+
+      if (!chunk.blocks[k + oyn] || id != chunk.blocks[k + oyn].id) {
+        facesByID[block.id][1].push(x, y, z);
+      }
+      if (!chunk.blocks[k + oyp] || id != chunk.blocks[k + oyp].id) {
+        facesByID[block.id][0].push(x, y, z);
+      }
+
+      if (z <= lzn || !chunk.blocks[k + ozn] || id != chunk.blocks[k + ozn].id) {
+        facesByID[block.id][2].push(x, y, z);
+      }
+      if (z >= lzp || !chunk.blocks[k + ozp] || id != chunk.blocks[k + ozp].id) {
+        facesByID[block.id][4].push(x, y, z);
+      }
+
       return;
     }
 
