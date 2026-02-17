@@ -15,6 +15,8 @@ const BLOCK_TYPES = [
   { name: "pine_leaves", texPaths: [pine_leaves_png, 0, 0, 0, 0, 0] },
   { name: "oak_planks", texPaths: [oak_planks_png, 0, 0, 0, 0, 0] },
   { name: "stone_bricks", texPaths: [stone_bricks_png, 0, 0, 0, 0, 0] },
+  { name: "glass", texPaths: [glass_png, 0, 0, 0, 0, 0], transparent: true },
+  { name: "blue_glass", texPaths: [blue_glass_png, 0, 0, 0, 0, 0], translucent: true },
 ];
 const ITEM_TYPES = [
   { name: "grass", texture: grass_item_png, blockName: "grass" },
@@ -28,6 +30,8 @@ const ITEM_TYPES = [
   { name: "pine_leaves", texture: pine_leaves_item_png, blockName: "pine_leaves" },
   { name: "oak_planks", texture: planks_item_png, blockName: "oak_planks" },
   { name: "stone_bricks", texture: stone_bricks_item_png, blockName: "stone_bricks" },
+  { name: "glass", texture: glass_item_png, blockName: "glass" },
+  { name: "blue_glass", texture: blue_glass_item_png, blockName: "blue_glass" },
 ];
 const BLOCK_ID = {}; // { name: id }
 const ITEM_ID = {}; // { name: id }
@@ -68,7 +72,7 @@ let raycaster;
 
 // World & world gen
 // store chunks by key
-// { "cx,cz": { blocks: [{ id }], mesh, updateMesh, loaded, modified } }
+// { "cx,cz": { blocks: [{ id }], mesh, trnsMeshes, updateMesh, loaded, modified } }
 const chunks = {};
 const hitboxMaterial = new THREE.MeshBasicMaterial({ visible: false });
 const textureLoader = new THREE.TextureLoader();
@@ -288,16 +292,21 @@ function generateBlockData() {
     BLOCK_ID[type.name] = i;
   });
 
+  // Ensure translucent block types are marked transparent
+  BLOCK_TYPES.forEach(type => {
+    if (type.translucent) type.transparent = true;
+  });
+
   // Block type materials
   for (const blockType of Object.values(BLOCK_TYPES)) {
     blockType.materials = [];
+    if (blockType.translucent) blockType.materialsBack = [];
 
     for (const path of blockType.texPaths) {
-      let material;
-
       if (typeof path === "number") {
         // Repeat from previous material
-        material = blockType.materials[path];
+        blockType.materials.push(blockType.materials[path]);
+        blockType.materialsBack?.push(blockType.materialsBack[path]);
       } else {
         // Generate a new material from the texture
         let texture = textureLoader.load(path);
@@ -306,10 +315,31 @@ function generateBlockData() {
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestFilter;
 
-        material = new THREE.MeshStandardMaterial({ map: texture });
-      }
+        // Setup material settings
+        const settings = { map: texture };
+        if (blockType.translucent) {
+          settings.transparent = true;
+          settings.polygonOffset = true;
+          settings.polygonOffsetFactor = 0.05;
+          settings.polygonOffsetUnits = 0.05;
+        } else if (blockType.transparent) {
+          settings.transparent = true;
+          settings.alphaTest = 0.5;
+          settings.side = THREE.DoubleSide;
+        }
 
-      blockType.materials.push(material);
+        const material = new THREE.MeshStandardMaterial(settings);
+        blockType.materials.push(material);
+
+        if (blockType.translucent) {
+          // Set back face materials
+          settings.side = THREE.BackSide;
+          settings.polygonOffsetFactor = -0.05;
+          settings.polygonOffsetUnits = -0.05;
+          const backMaterial = new THREE.MeshStandardMaterial(settings);
+          blockType.materialsBack.push(backMaterial);
+        }
+      }
     }
   }
 }
@@ -651,7 +681,9 @@ function onKeyDown(event) {
       moveControls.up = true;
       break;
     case "ShiftLeft":
-      moveControls.crouch = true;
+      if (!isInventoryOpen) {
+        moveControls.crouch = true;
+      }
       break;
     case "KeyR":
       moveControls.sprint = true;
@@ -724,7 +756,9 @@ function onKeyUp(event) {
       moveControls.up = false;
       break;
     case "ShiftLeft":
-      moveControls.crouch = false;
+      if (!isInventoryOpen) {
+        moveControls.crouch = false;
+      }
       break;
     case "KeyR":
       moveControls.sprint = false;
@@ -1242,6 +1276,7 @@ function destroyWorld() {
   for (const ck of Object.keys(chunks)) {
     if (chunks[ck].mesh) {
       scene.remove(chunks[ck].mesh);
+      chunks[ck].trnsMeshes?.forEach(mesh => scene.remove(mesh));
       chunks[ck].mesh.geometry.dispose();
     }
     delete chunks[ck];
@@ -1627,6 +1662,7 @@ function unloadChunk(chunk) {
   chunk.loaded = false;
 
   scene.remove(chunk.mesh);
+  chunk.trnsMeshes?.forEach(mesh => scene.remove(mesh));
 }
 
 /** Reload a chunk, adding its mesh back into the scene */
@@ -1635,6 +1671,7 @@ function reloadChunk(chunk) {
   chunk.loaded = true;
 
   scene.add(chunk.mesh);
+  chunk.trnsMeshes?.forEach(mesh => scene.add(mesh));
 }
 
 /** Generate, unload, and update chunks based on the player's position */
@@ -1664,9 +1701,13 @@ function updateChunksAroundPlayer(generateOne) {
       const chunk = chunks[ck];
       if (chunk.updateMesh) {
         scene.remove(chunk.mesh);
+        chunk.trnsMeshes?.forEach(mesh => scene.remove(mesh));
         generateChunkMesh(ck);
         chunk.updateMesh = false;
-        if (chunk.loaded) scene.add(chunk.mesh);
+        if (chunk.loaded) {
+          scene.add(chunk.mesh);
+          chunk.trnsMeshes.forEach(mesh => scene.add(mesh));
+        }
 
         if (generateOne) {
           generated = true;
@@ -1716,6 +1757,10 @@ function generateChunkMesh(ck) {
   const vertsPerFace = faces.xn.pos.length;
   const idxsPerFace = faces.xn.idx.length;
 
+  // Dispose old trnsMeshes
+  chunk.trnsMeshes?.forEach(mesh => mesh.geometry.dispose());
+  chunk.trnsMeshes = [];
+
   // Keep track of how many vertices have been added
   let vertexCount = 0;
 
@@ -1760,12 +1805,22 @@ function generateChunkMesh(ck) {
   const oyp = CHUNK_SIZE * CHUNK_SIZE;
   const ozn = -1;
   const ozp = 1;
+  const ocxn = CHUNK_SIZE * (CHUNK_SIZE - 1);
+  const ocxp = -CHUNK_SIZE * (CHUNK_SIZE - 1);
+  const oczn = CHUNK_SIZE - 1;
+  const oczp = -CHUNK_SIZE + 1;
 
   // Limits for checking adjacent blocks to prevent checking the next row
   const lxn = cwx;
   const lxp = cwx + CHUNK_SIZE - 1;
   const lzn = cwz;
   const lzp = cwz + CHUNK_SIZE - 1;
+
+  // Adjacent Chunks
+  const cxn = chunks[chunkKey(cx - 1, cz)];
+  const cxp = chunks[chunkKey(cx + 1, cz)];
+  const czn = chunks[chunkKey(cx, cz - 1)];
+  const czp = chunks[chunkKey(cx, cz + 1)];
 
   chunk.blocks.forEach((block, k) => {
     // Calculate world coords
@@ -1778,13 +1833,150 @@ function generateChunkMesh(ck) {
       facesByID[block.id] = [[], [], [], [], [], []];
     }
 
+    const id = chunk.blocks[k].id;
+    const blockType = BLOCK_TYPES[id];
+
+    // Use seperate mesh for translucent
+    if (blockType.translucent) {
+      const pos = [];
+      const norm = [];
+      const uv = [];
+      const idx = [];
+      let numVerts = 0;
+
+      const geo = new THREE.BufferGeometry();
+
+      // Helper function to add a face for this mesh
+      function addFaceTranslucent(vertData, matIdx) {
+        // Add group
+        geo.addGroup(idx.length, idxsPerFace, matIdx);
+
+        // Add vertex data
+        pos.push(...vertData.pos.flat());
+        norm.push(...new Array(vertsPerFace).fill(vertData.normal).flat());
+        uv.push(...vertData.uv.flat());
+        idx.push(...vertData.idx.map(i => i + numVerts));
+
+        numVerts += vertsPerFace;
+      }
+
+      // Determine and add faces to the mesh
+      if (
+        x > lxn
+          ? !chunk.blocks[k + oxn] || id != chunk.blocks[k + oxn].id
+          : !cxn.blocks[k + ocxn] || id != cxn.blocks[k + ocxn].id
+      ) {
+        addFaceTranslucent(faces.xn, 5);
+      }
+      if (
+        x < lxp
+          ? !chunk.blocks[k + oxp] || id != chunk.blocks[k + oxp].id
+          : !cxp.blocks[k + ocxp] || id != cxp.blocks[k + ocxp].id
+      ) {
+        addFaceTranslucent(faces.xp, 3);
+      }
+
+      if (!chunk.blocks[k + oyn] || id != chunk.blocks[k + oyn].id) {
+        addFaceTranslucent(faces.yn, 1);
+      }
+      if (!chunk.blocks[k + oyp] || id != chunk.blocks[k + oyp].id) {
+        addFaceTranslucent(faces.yp, 0);
+      }
+
+      if (
+        z > lzn
+          ? !chunk.blocks[k + ozn] || id != chunk.blocks[k + ozn].id
+          : !czn.blocks[k + oczn] || id != czn.blocks[k + oczn].id
+      ) {
+        addFaceTranslucent(faces.zn, 2);
+      }
+      if (
+        z < lzp
+          ? !chunk.blocks[k + ozp] || id != chunk.blocks[k + ozp].id
+          : !czp.blocks[k + oczp] || id != czp.blocks[k + oczp].id
+      ) {
+        addFaceTranslucent(faces.zp, 4);
+      }
+
+      // Construct and add meshes
+      geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pos), 3));
+      geo.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(norm), 3));
+      geo.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(uv), 2));
+      geo.setIndex(idx);
+
+      const cubeBack = new THREE.Mesh(geo, blockType.materialsBack);
+      const cubeFront = new THREE.Mesh(geo, blockType.materials);
+
+      cubeFront.position.set(x, y, z);
+      cubeBack.position.set(x, y, z);
+
+      chunk.trnsMeshes.push(cubeBack, cubeFront);
+      return;
+    }
+
+    // Add all faces if transparent except if shared by same block type
+    if (blockType.transparent) {
+      if (
+        x > lxn
+          ? !chunk.blocks[k + oxn] || id != chunk.blocks[k + oxn].id
+          : !cxn.blocks[k + ocxn] || id != cxn.blocks[k + ocxn].id
+      ) {
+        facesByID[block.id][5].push(x, y, z);
+      }
+      if (
+        x < lxp
+          ? !chunk.blocks[k + oxp] || id != chunk.blocks[k + oxp].id
+          : !cxp.blocks[k + ocxp] || id != cxp.blocks[k + ocxp].id
+      ) {
+        facesByID[block.id][3].push(x, y, z);
+      }
+
+      if (!chunk.blocks[k + oyn] || id != chunk.blocks[k + oyn].id) {
+        facesByID[block.id][1].push(x, y, z);
+      }
+      if (!chunk.blocks[k + oyp] || id != chunk.blocks[k + oyp].id) {
+        facesByID[block.id][0].push(x, y, z);
+      }
+
+      if (
+        z > lzn
+          ? !chunk.blocks[k + ozn] || id != chunk.blocks[k + ozn].id
+          : !czn.blocks[k + oczn] || id != czn.blocks[k + oczn].id
+      ) {
+        facesByID[block.id][2].push(x, y, z);
+      }
+      if (
+        z < lzp
+          ? !chunk.blocks[k + ozp] || id != chunk.blocks[k + ozp].id
+          : !czp.blocks[k + oczp] || id != czp.blocks[k + oczp].id
+      ) {
+        facesByID[block.id][4].push(x, y, z);
+      }
+
+      return;
+    }
+
     // Check surroundings and add faces only if needed
-    if (!(chunk.blocks[k + oxn] && x > lxn)) facesByID[block.id][5].push(x, y, z);
-    if (!(chunk.blocks[k + oxp] && x < lxp)) facesByID[block.id][3].push(x, y, z);
-    if (!chunk.blocks[k + oyn]) facesByID[block.id][1].push(x, y, z);
-    if (!chunk.blocks[k + oyp]) facesByID[block.id][0].push(x, y, z);
-    if (!(chunk.blocks[k + ozn] && z > lzn)) facesByID[block.id][2].push(x, y, z);
-    if (!(chunk.blocks[k + ozp] && z < lzp)) facesByID[block.id][4].push(x, y, z);
+    if (x <= lxn || !chunk.blocks[k + oxn] || BLOCK_TYPES[chunk.blocks[k + oxn].id].transparent) {
+      facesByID[block.id][5].push(x, y, z);
+    }
+    if (x >= lxp || !chunk.blocks[k + oxp] || BLOCK_TYPES[chunk.blocks[k + oxp].id].transparent) {
+      facesByID[block.id][3].push(x, y, z);
+    }
+
+    if (!chunk.blocks[k + oyn] || BLOCK_TYPES[chunk.blocks[k + oyn].id].transparent) {
+      facesByID[block.id][1].push(x, y, z);
+    }
+    if (!chunk.blocks[k + oyp] || BLOCK_TYPES[chunk.blocks[k + oyp].id].transparent) {
+      facesByID[block.id][0].push(x, y, z);
+    }
+
+    if (z <= lzn || !chunk.blocks[k + ozn] || BLOCK_TYPES[chunk.blocks[k + ozn].id].transparent) {
+      facesByID[block.id][2].push(x, y, z);
+    }
+    if (z >= lzp || !chunk.blocks[k + ozp] || BLOCK_TYPES[chunk.blocks[k + ozp].id].transparent) {
+      facesByID[block.id][4].push(x, y, z);
+    }
   });
 
   // Construct the faces calculated above
