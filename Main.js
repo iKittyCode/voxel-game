@@ -1013,6 +1013,29 @@ function onImportSave() {
     importMenu.style.display = "none";
     mainMenu.style.display = "none";
     loadWorld(save);
+ 
+  let json_save = JSON.parse(save)    
+  currentWorldName = json_save.name;
+  console.log(currentWorldName)
+  
+
+ 
+    const keys = JSON.parse(localStorage.getItem("voxel_saves")) || [];
+ console.log(keys)
+    const newKey = 'voxel_save_' + currentWorldName
+    if (keys.includes(newKey)) {
+alert("A save file with this name already exists. Rename the save name in the json.")
+
+return;
+
+    } else {
+
+      loadWorld(save)
+      importMenu.style.display = "none";
+      mainMenu.style.display = "none";
+    }
+  
+    
   }
 }
 
